@@ -1,0 +1,55 @@
+[env]
+UV_FROZEN = true
+UV_NO_SYNC = true
+
+[env._.python.venv]
+path = ".venv"
+create = true
+
+[tools]
+python = "3.14"
+uv = "latest"
+prek = "latest"
+
+[hooks]
+postinstall = [
+    "prek install",
+    { task = "sync" },
+]
+
+[settings]
+task.output = "quiet"
+
+[tasks.relock]
+run = ["uv lock"]
+env.UV_FROZEN = 0
+
+[tasks.sync]
+run = ["uv sync --all-extras --all-groups"]
+
+[tasks.lint]
+description = "Run linters"
+run = "prek run -a"
+
+[tasks.format]
+description = "Format the code according to known rules"
+run = [
+    "uv run ruff check --select I --fix-only --show-fixes src tests",
+    "uv run ruff format src tests",
+]
+
+[tasks.typing]
+description = "Run the static type checker"
+run = "uv run ty check"
+
+[tasks.test]
+description = "Run the test suite"
+run = "uv run pytest"
+
+[tasks.cover]
+description = "Run the test suite with coverage"
+run = "uv run pytest --cov=jinja_yaml --cov-report=term-missing --cov-report=xml:reports/coverage.xml"
+
+[tasks.check]
+description = "Run the full quality gate: lint, typing and tests"
+depends = ["lint", "typing", "test"]
