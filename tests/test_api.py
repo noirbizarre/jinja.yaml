@@ -63,3 +63,36 @@ def test_load_dispatches_on_iterable_of_paths(write_yaml: Callable[[str, str], P
 def test_load_rejects_unsupported_source() -> None:
     with pytest.raises(LoadError):
         load(42)  # ty: ignore[invalid-argument-type]
+
+
+class MyDict(dict[str, object]):
+    """A trivial ``dict`` subclass used to check ``mapping_cls`` threading."""
+
+
+def test_mapping_cls_defaults_to_dict() -> None:
+    result = load_dict({"a": "{{ b }}", "b": 1})
+    assert type(result) is dict
+
+
+def test_mapping_cls_applied_to_output() -> None:
+    result = load_dict({"a": "{{ b }}", "b": 1}, mapping_cls=MyDict)
+    assert type(result) is MyDict
+    assert result == {"a": 1, "b": 1}
+
+
+def test_mapping_cls_applied_to_nested() -> None:
+    result = load_dict({"net": {"domain": "home.arpa"}}, mapping_cls=MyDict)
+    assert isinstance(result["net"], MyDict)
+
+
+def test_mapping_cls_via_load_file(write_yaml: Callable[[str, str], Path]) -> None:
+    path = write_yaml("config.jinja.yaml", "fqdn: nas.{{ domain }}\ndomain: home.arpa\n")
+    result = load_file(path, mapping_cls=MyDict)
+    assert type(result) is MyDict
+    assert result["fqdn"] == "nas.home.arpa"
+
+
+def test_mapping_cls_via_load(write_yaml: Callable[[str, str], Path]) -> None:
+    path = write_yaml("config.jinja.yaml", "a: 1\n")
+    assert type(load(path, mapping_cls=MyDict)) is MyDict
+    assert type(load({"a": 1}, mapping_cls=MyDict)) is MyDict

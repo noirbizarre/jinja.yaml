@@ -7,6 +7,7 @@ stay small, explicit and strongly typed.
 
 from __future__ import annotations
 
+from collections.abc import MutableMapping
 from typing import Any
 
 type Scalar = str | int | float | bool | None
@@ -23,6 +24,9 @@ type Namespaces = dict[str, Any]
 
 type KeyPath = tuple[str | int, ...]
 """The location of a node within a document, e.g. ``("network", "hosts", 0)``."""
+
+type MappingClass = type[MutableMapping[str, Any]]
+"""A mapping type used to build resolved documents (defaults to :class:`dict`)."""
 
 
 def format_key_path(path: KeyPath) -> str:

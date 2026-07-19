@@ -17,7 +17,7 @@ see.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from jinja2 import TemplateSyntaxError, UndefinedError
 
@@ -29,7 +29,7 @@ from .exceptions import (
     ResolutionError,
 )
 from .graph import DependencyGraph
-from .types import Document, KeyPath, Namespaces, Node, format_key_path
+from .types import Document, KeyPath, MappingClass, Namespaces, Node, format_key_path
 
 __all__ = ["resolve"]
 
@@ -39,12 +39,18 @@ def resolve(
     *,
     namespaces: Namespaces | None = None,
     environment: Environment | None = None,
+    mapping_cls: MappingClass = dict,
 ) -> Document:
-    """Resolve every templated value in ``document`` and return a new document."""
+    """Resolve every templated value in ``document`` and return a new document.
+
+    Resolved mappings are built with ``mapping_cls``, which defaults to
+    :class:`dict`. Pass any :class:`~collections.abc.MutableMapping` subclass to
+    control the concrete type of the returned document and its nested mappings.
+    """
     namespaces = namespaces or {}
     environment = environment or Environment()
     _check_namespace_collisions(document, namespaces)
-    resolver = _Resolver(document, namespaces, environment)
+    resolver = _Resolver(document, namespaces, environment, mapping_cls)
     return resolver.run()
 
 
@@ -62,10 +68,12 @@ class _Resolver:
         document: Document,
         namespaces: Namespaces,
         environment: Environment,
+        mapping_cls: MappingClass,
     ) -> None:
         self._document = document
         self._namespaces = namespaces
         self._env = environment
+        self._mapping_cls = mapping_cls
         self._cache: dict[KeyPath, Node] = {}
         self._stack: list[KeyPath] = []
         self._graph = DependencyGraph()
@@ -75,8 +83,10 @@ class _Resolver:
         cycle = self._graph.find_cycle()
         if cycle is not None:
             raise CircularReferenceError(cycle)
-        resolved = {key: self._resolve_node(value, (key,)) for key, value in self._document.items()}
-        return resolved
+        resolved = self._mapping_cls()
+        for key, value in self._document.items():
+            resolved[key] = self._resolve_node(value, (key,))
+        return cast("Document", resolved)
 
     # -- dependency graph -------------------------------------------------
 
@@ -121,7 +131,10 @@ class _Resolver:
         if isinstance(node, str) and self._env.is_template(node):
             return self._render(node, path)
         if isinstance(node, dict):
-            return {key: self._resolve_node(value, (*path, key)) for key, value in node.items()}
+            result = self._mapping_cls()
+            for key, value in node.items():
+                result[key] = self._resolve_node(value, (*path, key))
+            return cast("Node", result)
         if isinstance(node, list):
             return [self._resolve_node(value, (*path, index)) for index, value in enumerate(node)]
         return node

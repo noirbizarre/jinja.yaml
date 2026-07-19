@@ -17,7 +17,7 @@ from .environment import Environment
 from .exceptions import LoadError
 from .merger import merge
 from .resolver import resolve
-from .types import Document, Namespaces
+from .types import Document, MappingClass, Namespaces
 
 __all__ = ["load", "load_file", "load_files", "load_dict"]
 
@@ -27,10 +27,13 @@ def load_file(
     *,
     namespaces: Namespaces | None = None,
     environment: Environment | None = None,
+    mapping_cls: MappingClass = dict,
 ) -> Document:
     """Load and resolve a single YAML file."""
     document = loader.load_path(path)
-    return resolve(document, namespaces=namespaces, environment=environment)
+    return resolve(
+        document, namespaces=namespaces, environment=environment, mapping_cls=mapping_cls
+    )
 
 
 def load_files(
@@ -38,11 +41,12 @@ def load_files(
     *,
     namespaces: Namespaces | None = None,
     environment: Environment | None = None,
+    mapping_cls: MappingClass = dict,
 ) -> Document:
     """Load, merge and resolve several YAML files as one logical document."""
     documents = loader.load_paths(paths)
     merged = merge(documents)
-    return resolve(merged, namespaces=namespaces, environment=environment)
+    return resolve(merged, namespaces=namespaces, environment=environment, mapping_cls=mapping_cls)
 
 
 def load_dict(
@@ -50,10 +54,13 @@ def load_dict(
     *,
     namespaces: Namespaces | None = None,
     environment: Environment | None = None,
+    mapping_cls: MappingClass = dict,
 ) -> Document:
     """Resolve an in-memory mapping. The input is never mutated."""
     document = loader.load_mapping(data)
-    return resolve(document, namespaces=namespaces, environment=environment)
+    return resolve(
+        document, namespaces=namespaces, environment=environment, mapping_cls=mapping_cls
+    )
 
 
 def load(
@@ -61,6 +68,7 @@ def load(
     *,
     namespaces: Namespaces | None = None,
     environment: Environment | None = None,
+    mapping_cls: MappingClass = dict,
 ) -> Document:
     """Load and resolve a source, dispatching on its type.
 
@@ -69,10 +77,17 @@ def load(
     """
     if isinstance(source, dict):
         return load_dict(
-            cast("dict[str, Any]", source), namespaces=namespaces, environment=environment
+            cast("dict[str, Any]", source),
+            namespaces=namespaces,
+            environment=environment,
+            mapping_cls=mapping_cls,
         )
     if isinstance(source, (str, Path)):
-        return load_file(source, namespaces=namespaces, environment=environment)
+        return load_file(
+            source, namespaces=namespaces, environment=environment, mapping_cls=mapping_cls
+        )
     if isinstance(source, Iterable):
-        return load_files(source, namespaces=namespaces, environment=environment)
+        return load_files(
+            source, namespaces=namespaces, environment=environment, mapping_cls=mapping_cls
+        )
     raise LoadError(f"Unsupported source type: {type(source).__name__}")
