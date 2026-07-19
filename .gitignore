@@ -223,3 +223,6 @@ __marimo__/
 
 # Project reports
 /reports/
+
+# Version file generated at build time from Git tags by pdm-backend
+/src/jinja_yaml/VERSION

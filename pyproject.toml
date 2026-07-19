@@ -1,6 +1,6 @@
 [project]
 name = "jinja.yaml"
-version = "0.1.0"
+dynamic = ["version"]
 description = "YAML configuration with dependency-aware Jinja templating"
 authors = [
     { name = "Axel H.", email = "noirbizarre@gmail.com" },
@@ -16,7 +16,6 @@ keywords = ["yaml", "jinja", "jinja2", "configuration", "templating"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
@@ -34,12 +33,19 @@ Issues = "https://github.com/noirbizarre/jinja.yaml/issues"
 
 
 [build-system]
-requires = ["uv_build>=0.11,<0.13"]
-build-backend = "uv_build"
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
 
-[tool.uv.build-backend]
-module-name = "jinja_yaml"
-module-root = "src"
+# uv's build backend does not (yet) support SCM/Git-based versioning:
+# https://github.com/astral-sh/uv/issues/14037
+# pdm-backend is used instead to derive the version from Git tags.
+[tool.pdm.version]
+source = "scm"
+write_to = "jinja_yaml/VERSION"
+
+[tool.pdm.build]
+package-dir = "src"
+includes = ["src/jinja_yaml"]
 
 
 [dependency-groups]
@@ -113,7 +119,7 @@ exclude_also = [
 [tool.commitizen]
 name = "emotional"
 github = "noirbizarre/jinja.yaml"
-version_provider = "pep621"
+version_provider = "scm"
 major_version_zero = true
 breaking_change_exclamation_in_title = true
 allowed_prefixes = ["Merge", "Revert", "Pull request", "fixup!", "squash!", "Initial", "[pre-commit.ci]"]
