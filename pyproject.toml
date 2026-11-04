@@ -48,7 +48,7 @@ Changelog = "https://github.com/noirbizarre/jinja.yaml/blob/main/CHANGELOG.md"
 # the range has, more than once, changed what it does with `module-root`.
 # Dependabot bumps it, and `uv sync` warns when the local uv falls outside it —
 # which is the signal to take that bump.
-requires = ["uv_build>=0.12,<0.13"]
+requires = ["uv_build>=0.12,<0.14"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
