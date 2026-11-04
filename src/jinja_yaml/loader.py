@@ -20,7 +20,7 @@ import yaml.resolver
 from .exceptions import DuplicateKeyError, LoadError
 from .types import Document
 
-__all__ = ["load_path", "load_paths", "load_mapping", "StrictSafeLoader"]
+__all__ = ["StrictSafeLoader", "load_mapping", "load_path", "load_paths"]
 
 
 class StrictSafeLoader(yaml.SafeLoader):

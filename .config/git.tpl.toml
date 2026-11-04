@@ -1,0 +1,25 @@
+# git-tpl — https://noirbizarre.github.io/git-tpl/configuration/
+#
+# This file is versioned with the project. Edit an answer and run
+# `git tpl update` to re-render the template with it.
+
+[template]
+source = "https://github.com/noirbizarre/python.tpl"
+
+[answers]
+author_email = "noirbizarre@gmail.com"
+author_name = "Axel Haustant"
+cli = false
+codecov = true
+copyright_holder = "Axel Haustant"
+copyright_year = 2026
+description = "YAML configuration with dependency-aware Jinja templating"
+distribution = "jinja.yaml"
+docs = false
+gh_ship = true
+keywords = "yaml, jinja"
+owner = "noirbizarre"
+package = "jinja_yaml"
+pypi = true
+python_min = "3.12"
+stack = "uv"

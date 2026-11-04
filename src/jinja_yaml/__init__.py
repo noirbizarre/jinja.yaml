@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError, version
+
 from .api import load, load_dict, load_file, load_files
 from .environment import Environment
 from .exceptions import (
@@ -15,43 +17,31 @@ from .exceptions import (
     ResolutionError,
 )
 
-
-def _resolve_version() -> str:
-    """Return the package version.
-
-    The version is written into ``VERSION`` at build time by pdm-backend from
-    the Git tags. When running from a source checkout (no build artifact), fall
-    back to the installed distribution metadata, then to a dev placeholder.
-    """
-    from pathlib import Path
-
-    version_file = Path(__file__).parent / "VERSION"
-    if version_file.is_file():
-        return version_file.read_text(encoding="utf-8").strip()
-
-    from importlib.metadata import PackageNotFoundError, version
-
-    try:
-        return version("jinja.yaml")
-    except PackageNotFoundError:
-        return "0.0.0"
-
-
-__version__ = _resolve_version()
+try:
+    # The installed distribution's metadata is the single source of truth,
+    # whichever stack wrote it: on this one the version comes from
+    # `project.version` in pyproject.toml, and metadata is where
+    # it lands either way. Reading a `VERSION` file written into the package —
+    # what the previous generation of this template did — reports the version of
+    # the *source tree*, which stops being the same thing the moment the package
+    # is installed from a wheel.
+    __version__ = version("jinja.yaml")
+except PackageNotFoundError:  # pragma: no cover - only when running uninstalled
+    __version__ = "0.0.0.dev0"
 
 __all__ = [
+    "CircularReferenceError",
+    "DuplicateKeyError",
+    "Environment",
+    "InvalidTemplateError",
+    "JinjaYamlError",
+    "LoadError",
+    "MergeError",
+    "NamespaceCollisionError",
+    "ResolutionError",
     "__version__",
     "load",
     "load_dict",
     "load_file",
     "load_files",
-    "Environment",
-    "JinjaYamlError",
-    "LoadError",
-    "MergeError",
-    "DuplicateKeyError",
-    "NamespaceCollisionError",
-    "ResolutionError",
-    "InvalidTemplateError",
-    "CircularReferenceError",
 ]

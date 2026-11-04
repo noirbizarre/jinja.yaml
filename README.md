@@ -1,5 +1,34 @@
-# jinja.yaml
+<!-- markdownlint-disable MD013 MD033 MD041 -->
+<p align="center">
+  <img src="docs/images/icon.svg" alt="jinja.yaml" width="160">
+</p>
 
+<h1 align="center">jinja.yaml</h1>
+
+<p align="center"><strong>YAML configuration with dependency-aware Jinja templating</strong></p>
+
+<p align="center">
+  <a href="https://github.com/noirbizarre/jinja.yaml/actions/workflows/ci.yaml">
+    <img src="https://github.com/noirbizarre/jinja.yaml/actions/workflows/ci.yaml/badge.svg" alt="CI">
+  </a>
+  <a href="https://codecov.io/gh/noirbizarre/jinja.yaml">
+    <img src="https://codecov.io/gh/noirbizarre/jinja.yaml/graph/badge.svg" alt="Codecov">
+  </a>
+  <a href="https://pypi.org/project/jinja.yaml/">
+    <img src="https://img.shields.io/pypi/v/jinja.yaml" alt="PyPI">
+  </a>
+  <img src="https://img.shields.io/github/v/release/noirbizarre/jinja.yaml" alt="Release">
+  <a href="https://github.com/j178/prek">
+    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/j178/prek/master/docs/assets/badge-v0.json" alt="prek">
+  </a>
+  <img src="https://img.shields.io/github/license/noirbizarre/jinja.yaml" alt="License">
+</p>
+
+<!-- markdownlint-enable MD013 MD033 MD041 -->
+
+---
+
+<!-- One paragraph: what this does and why it exists. Lead with the problem, -->
 YAML configuration with dependency-aware Jinja templating.
 
 `jinja.yaml` loads one or more YAML documents containing [Jinja2][jinja]
@@ -39,11 +68,12 @@ Key properties:
 - **Type-preserving** — a value that is a single expression keeps its native
   type (`int`, `list`, `dict`, ...).
 - **Strict** — missing references, duplicate keys and circular references raise
-  explicit, actionable errors.
+
+<!-- not the implementation. -->
 
 ## Installation
 
-```console
+```Shell
 pip install jinja.yaml
 ```
 
@@ -228,6 +258,10 @@ mise run check
 
 Commits follow the [Conventional Commits][conventional] specification, enforced
 via [Commitizen][commitizen] with the [Emotional][emotional] plugin.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

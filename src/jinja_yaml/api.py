@@ -19,7 +19,7 @@ from .merger import merge
 from .resolver import resolve
 from .types import Document, MappingClass, Namespaces
 
-__all__ = ["load", "load_file", "load_files", "load_dict"]
+__all__ = ["load", "load_dict", "load_file", "load_files"]
 
 
 def load_file(
