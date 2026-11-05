@@ -20,17 +20,20 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from jinja2 import TemplateError, TemplateSyntaxError
+from jinja2 import TemplateError, TemplateSyntaxError, Undefined, UndefinedError
 
 from .environment import Environment
 from .exceptions import (
     CircularReferenceError,
     InvalidTemplateError,
+    MissingReferenceError,
     NamespaceCollisionError,
     ResolutionError,
+    SourceLocation,
+    TemplateEvaluationError,
 )
 from .graph import DependencyGraph
-from .types import Document, KeyPath, MappingClass, Namespaces, Node, format_key_path
+from .types import Document, KeyPath, MappingClass, Namespaces, Node
 
 __all__ = ["resolve"]
 
@@ -116,11 +119,13 @@ class _Resolver:
             references = tuple(sorted(self._env.referenced_variables(source)))
         except TemplateSyntaxError as error:
             template = f" in template {error.name!r}" if error.name else ""
-            raise InvalidTemplateError(path, f"{error}{template}") from error
-        except (TemplateError, TypeError) as error:
-            raise ResolutionError(
-                f"Failed to analyze {format_key_path(path)!r}: {error}"
+            raise InvalidTemplateError(
+                path,
+                f"{error}{template}",
+                location=SourceLocation(error.filename or error.name, error.lineno),
             ) from error
+        except (TemplateError, TypeError) as error:
+            raise InvalidTemplateError(path, f"Failed to analyze template: {error}") from error
         self._references[path] = references
         return references
 
@@ -160,10 +165,32 @@ class _Resolver:
         context = self._build_context(source, path)
         try:
             template = self._env.from_string(source)
-            return template.render(context)
-        except TemplateError as error:
-            raise ResolutionError(
-                f"Failed to resolve {format_key_path(path)!r}: {error}"
+            result = template.render(context)
+            if isinstance(result, Undefined):
+                # Native rendering may return Undefined without using it.
+                # StrictUndefined raises here with the original lookup detail.
+                raise UndefinedError(str(result) or "Template returned an undefined value")
+            return result
+        except ResolutionError:
+            # Preserve domain errors raised by caller-provided extensions.
+            raise
+        except UndefinedError as error:
+            raise MissingReferenceError(
+                path, message=str(error), dependency_chain=tuple(self._stack)
+            ) from error
+        except TemplateSyntaxError as error:
+            raise InvalidTemplateError(
+                path,
+                str(error),
+                dependency_chain=tuple(self._stack),
+                location=SourceLocation(error.filename or error.name, error.lineno),
+            ) from error
+        except Exception as error:
+            # Jinja lets Python errors from operators, filters and globals escape.
+            raise TemplateEvaluationError(
+                path,
+                f"Evaluation failed ({type(error).__name__}): {error}",
+                dependency_chain=tuple(self._stack),
             ) from error
 
     def _build_context(self, source: str, path: KeyPath) -> dict[str, Any]:
@@ -179,8 +206,5 @@ class _Resolver:
             if name in self._document:
                 context[name] = self._resolve_node(self._document[name], (name,))
             elif name not in self._namespaces:
-                raise ResolutionError(
-                    f"Failed to resolve {format_key_path(path)!r}: "
-                    f"reference to undefined key or namespace {name!r}"
-                )
+                raise MissingReferenceError(path, name, dependency_chain=tuple(self._stack))
         return context
