@@ -10,6 +10,8 @@ offending key path so users can locate the problem in their documents.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from .types import KeyPath, format_key_path
 
 
@@ -50,8 +52,66 @@ class NamespaceCollisionError(JinjaYamlError):
         )
 
 
+@dataclass(frozen=True)
+class SourceLocation:
+    """Optional source metadata, with one-based line and column numbers.
+
+    Coordinates refer to ``source`` when named, otherwise to the value's
+    template text. YAML source coordinates are not yet retained by resolution.
+    """
+
+    source: str | None = None
+    line: int | None = None
+    column: int | None = None
+
+
 class ResolutionError(JinjaYamlError):
-    """Base class for failures occurring during template resolution."""
+    """Resolution failure with structured context for caller-owned formatting.
+
+    ``key_path`` identifies the failing node; ``dependency_chain`` records the
+    active resolution path when available. ``location`` can carry source
+    metadata without requiring callers to parse the human-readable message.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        key_path: KeyPath | None = None,
+        dependency_chain: tuple[KeyPath, ...] = (),
+        location: SourceLocation | None = None,
+    ) -> None:
+        self.key_path = key_path
+        self.dependency_chain = dependency_chain
+        self.location = location
+        super().__init__(message)
+
+
+class MissingReferenceError(ResolutionError):
+    """An undefined document key, namespace, attribute or item.
+
+    ``reference`` is the missing root name when statically known. For runtime
+    lookups it is ``None``; the original Jinja error describes the lookup.
+    """
+
+    def __init__(
+        self,
+        path: KeyPath,
+        reference: str | None = None,
+        *,
+        message: str | None = None,
+        dependency_chain: tuple[KeyPath, ...] = (),
+        location: SourceLocation | None = None,
+    ) -> None:
+        self.path = path
+        self.reference = reference
+        detail = message or f"reference to undefined key or namespace {reference!r}"
+        super().__init__(
+            f"Missing reference at {format_key_path(path)!r}: {detail}",
+            key_path=path,
+            dependency_chain=dependency_chain,
+            location=location,
+        )
 
 
 class InvalidTemplateError(ResolutionError):
@@ -61,10 +121,25 @@ class InvalidTemplateError(ResolutionError):
     offending node.
     """
 
-    def __init__(self, path: KeyPath, message: str) -> None:
+    def __init__(
+        self,
+        path: KeyPath,
+        message: str,
+        *,
+        dependency_chain: tuple[KeyPath, ...] = (),
+        location: SourceLocation | None = None,
+    ) -> None:
         self.path = path
-        location = format_key_path(path)
-        super().__init__(f"Invalid template at {location!r}: {message}")
+        super().__init__(
+            f"Invalid template at {format_key_path(path)!r}: {message}",
+            key_path=path,
+            dependency_chain=dependency_chain,
+            location=location,
+        )
+
+
+class TemplateEvaluationError(InvalidTemplateError):
+    """A template failed during evaluation, including custom filter failures."""
 
 
 class CircularReferenceError(ResolutionError):
@@ -74,7 +149,12 @@ class CircularReferenceError(ResolutionError):
     string representation renders it as ``a -> b -> c -> a``.
     """
 
-    def __init__(self, cycle: list[KeyPath]) -> None:
+    def __init__(self, cycle: list[KeyPath], *, location: SourceLocation | None = None) -> None:
         self.path = cycle
         rendered = " -> ".join(format_key_path(node) for node in cycle)
-        super().__init__(f"Circular reference detected: {rendered}")
+        super().__init__(
+            f"Circular reference detected: {rendered}",
+            key_path=cycle[0] if cycle else None,
+            dependency_chain=tuple(cycle),
+            location=location,
+        )

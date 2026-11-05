@@ -13,8 +13,11 @@ from .exceptions import (
     JinjaYamlError,
     LoadError,
     MergeError,
+    MissingReferenceError,
     NamespaceCollisionError,
     ResolutionError,
+    SourceLocation,
+    TemplateEvaluationError,
 )
 
 try:
@@ -37,8 +40,11 @@ __all__ = [
     "JinjaYamlError",
     "LoadError",
     "MergeError",
+    "MissingReferenceError",
     "NamespaceCollisionError",
     "ResolutionError",
+    "SourceLocation",
+    "TemplateEvaluationError",
     "__version__",
     "load",
     "load_dict",

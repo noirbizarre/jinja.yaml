@@ -188,6 +188,44 @@ except CircularReferenceError as error:
 # Circular reference detected: a -> b -> c -> a
 ```
 
+#### Resolution diagnostics
+
+All resolution failures derive from `ResolutionError` (and `JinjaYamlError`):
+
+- `MissingReferenceError`: an unknown root key/namespace or an undefined nested
+  attribute/item. `.reference` contains the missing root name when statically
+  known, otherwise `None`.
+- `InvalidTemplateError`: invalid syntax or failed static template analysis.
+- `TemplateEvaluationError`: evaluation failed, including Python exceptions from
+  filters, globals, or template operators. Also an `InvalidTemplateError`.
+- `CircularReferenceError`: a dependency cycle; `.path` is the ordered, closed
+  list of key paths, such as `[("a",), ("b",), ("a",)]`.
+
+Errors expose `.key_path` (the failing key as a tuple), `.dependency_chain`
+(a tuple of active key paths, or the closed cycle), and optional `.location`
+metadata. Static analysis failures have no active resolution chain. These fields
+let applications build their own diagnostics without parsing exception messages:
+
+```python
+from jinja_yaml import MissingReferenceError, load_dict
+
+try:
+    load_dict({"url": "{{ host }}", "host": "{{ domain }}"})
+except MissingReferenceError as error:
+    print(error)
+    print(error.key_path, error.reference, error.dependency_chain)
+# Missing reference at 'host': reference to undefined key or namespace 'domain'
+# ('host',) domain (('url',), ('host',))
+```
+
+Wrapped failures retain the original exception in `error.__cause__`. Statically
+detected missing roots and configuration cycles have no underlying exception.
+Syntax errors include a `SourceLocation` with a one-based `.line` and, for
+loader-backed templates, `.source` when available. `.column` is optional. These
+coordinates describe template text, not the YAML file: YAML source metadata is
+not yet retained through merging and resolution. Errors accept optional source
+locations so future metadata can be attached without changing diagnostic fields.
+
 #### Loading and validation errors
 
 Input documents must be mappings with string keys at every depth. Values may
