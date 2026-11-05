@@ -15,8 +15,9 @@ from typing import Any, cast
 from . import loader
 from .environment import Environment
 from .exceptions import LoadError
-from .merger import merge
-from .resolver import resolve
+from .merger import _merge
+from .provenance import _SourceDocument
+from .resolver import _resolve
 from .types import Document, MappingClass, Namespaces
 
 __all__ = ["load", "load_dict", "load_file", "load_files"]
@@ -30,10 +31,10 @@ def load_file(
     mapping_cls: MappingClass = dict,
 ) -> Document:
     """Load and resolve a single YAML file."""
-    document = loader.load_path(path)
-    return resolve(
+    document = loader._load_path(path)
+    return _resolve(
         document, namespaces=namespaces, environment=environment, mapping_cls=mapping_cls
-    )
+    ).data
 
 
 def load_files(
@@ -44,9 +45,11 @@ def load_files(
     mapping_cls: MappingClass = dict,
 ) -> Document:
     """Load, merge and resolve several YAML files as one logical document."""
-    documents = loader.load_paths(paths)
-    merged = merge(documents)
-    return resolve(merged, namespaces=namespaces, environment=environment, mapping_cls=mapping_cls)
+    documents = [loader._load_path(path) for path in paths]
+    merged = _merge(documents)
+    return _resolve(
+        merged, namespaces=namespaces, environment=environment, mapping_cls=mapping_cls
+    ).data
 
 
 def load_dict(
@@ -57,10 +60,10 @@ def load_dict(
     mapping_cls: MappingClass = dict,
 ) -> Document:
     """Resolve an in-memory mapping. The input is never mutated."""
-    document = loader.load_mapping(data)
-    return resolve(
+    document = _SourceDocument(loader.load_mapping(data))
+    return _resolve(
         document, namespaces=namespaces, environment=environment, mapping_cls=mapping_cls
-    )
+    ).data
 
 
 def load(

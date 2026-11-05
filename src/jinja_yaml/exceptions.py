@@ -33,10 +33,14 @@ class DuplicateKeyError(LoadError, MergeError):
     This covers both duplicate keys *within* a single YAML document and
     conflicting leaf values discovered while *merging* several documents.
     Within a YAML mapping, even identical repeated values are rejected.
+    ``existing_locations`` and ``incoming_locations`` contain the contributing
+    definitions' coordinates when available.
     """
 
     def __init__(self, path: KeyPath, message: str | None = None) -> None:
         self.path = path
+        self.existing_locations: tuple[SourceLocation, ...] = ()
+        self.incoming_locations: tuple[SourceLocation, ...] = ()
         location = format_key_path(path)
         super().__init__(message or f"Duplicate key: {location!r} is defined more than once")
 
@@ -57,7 +61,8 @@ class SourceLocation:
     """Optional source metadata, with one-based line and column numbers.
 
     Coordinates refer to ``source`` when named, otherwise to the value's
-    template text. YAML source coordinates are not yet retained by resolution.
+    template text. Configuration origins use YAML value-node coordinates;
+    template syntax locations remain relative to the template's own text.
     """
 
     source: str | None = None
@@ -71,6 +76,8 @@ class ResolutionError(JinjaYamlError):
     ``key_path`` identifies the failing node; ``dependency_chain`` records the
     active resolution path when available. ``location`` can carry source
     metadata without requiring callers to parse the human-readable message.
+    ``source_locations`` retains all configuration origins separately from any
+    template-relative syntax coordinates in ``location``.
     """
 
     def __init__(
@@ -84,6 +91,7 @@ class ResolutionError(JinjaYamlError):
         self.key_path = key_path
         self.dependency_chain = dependency_chain
         self.location = location
+        self.source_locations: tuple[SourceLocation, ...] = ()
         super().__init__(message)
 
 

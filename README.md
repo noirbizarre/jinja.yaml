@@ -220,11 +220,39 @@ except MissingReferenceError as error:
 
 Wrapped failures retain the original exception in `error.__cause__`. Statically
 detected missing roots and configuration cycles have no underlying exception.
-Syntax errors include a `SourceLocation` with a one-based `.line` and, for
-loader-backed templates, `.source` when available. `.column` is optional. These
-coordinates describe template text, not the YAML file: YAML source metadata is
-not yet retained through merging and resolution. Errors accept optional source
-locations so future metadata can be attached without changing diagnostic fields.
+File-based loads retain YAML origins through merging and resolution. Pipeline-generated
+resolution errors expose `.source_locations`, a tuple of `SourceLocation` objects with the
+source filename and one-based line/column of each contributing YAML value. For
+missing references, evaluation failures, and cycles, `.location` is the first
+available configuration origin. Messages also include these origins.
+Caller-raised `ResolutionError` instances from filters, globals, or other extensions
+pass through unchanged, retaining their original metadata.
+
+Syntax errors keep their separate template coordinates in `.location`: a
+one-based template line and, for loader-backed templates, the template source
+when available. `.source_locations` identifies the YAML declaration as well.
+YAML marks refer to the start of the value (including a block scalar's `|` or
+`>`), not the exact failing character inside its template text.
+
+```python
+from jinja_yaml import MissingReferenceError, load_files
+
+try:
+    load_files(["base.yaml", "service.yaml"])
+except MissingReferenceError as error:
+    for origin in error.source_locations:
+        print(origin.source, origin.line, origin.column)
+```
+
+Recursive merges retain the contributing origins of each container and its
+individual children. Identical definitions retain all their origins, in input
+order; conflicting definitions still raise an error. A rendered value belongs
+to its template declaration, including any mapping/list descendants it produces,
+rather than to its dependencies. Alias origins refer to the anchor definition.
+In-memory loads have no source coordinates, and `.source_locations` is empty.
+Metadata stays internal to the load pipeline; successful calls return ordinary
+configuration mappings as before. Direct low-level operations on plain mappings
+do not recover discarded file metadata.
 
 #### Loading and validation errors
 
@@ -246,6 +274,9 @@ Repeated keys within a YAML mapping raise `DuplicateKeyError`, even when their
 values are identical. Its `.path` identifies the full nested key, including
 list indices. When merging separate documents, identical leaf values are
 allowed, but conflicting values raise `DuplicateKeyError`.
+Its `.existing_locations` and `.incoming_locations` tuples identify both sides
+when source metadata is available, including earlier identical definitions in a
+cross-file conflict. Within a single file, these locations point to key tokens.
 
 File-reading failures, invalid YAML, and unsupported document shapes raise
 `LoadError` (`DuplicateKeyError` is also a `LoadError`). File errors identify

@@ -18,7 +18,8 @@ import yaml
 
 from yaml.constructor import ConstructorError
 
-from .exceptions import DuplicateKeyError, LoadError
+from .exceptions import DuplicateKeyError, LoadError, SourceLocation
+from .provenance import _annotate_duplicate, _SourceDocument
 from .types import Document, KeyPath, Node, format_key_path
 
 __all__ = ["StrictSafeLoader", "load_mapping", "load_path", "load_paths"]
@@ -29,6 +30,13 @@ class StrictSafeLoader(yaml.SafeLoader):
 
     origin: str = "<YAML input>"
 
+    def __init__(self, stream: Any) -> None:
+        super().__init__(stream)
+        self.origins: dict[KeyPath, tuple[SourceLocation, ...]] = {}
+
+    def _source_location(self, node: yaml.Node) -> SourceLocation:
+        return SourceLocation(self.origin, node.start_mark.line + 1, node.start_mark.column + 1)
+
     def _location(self, node: yaml.Node, path: KeyPath) -> str:
         mark = node.start_mark
         return (
@@ -37,6 +45,7 @@ class StrictSafeLoader(yaml.SafeLoader):
         )
 
     def construct_document(self, node: yaml.Node) -> Any:
+        self.origins = {}
         if node.tag not in {"tag:yaml.org,2002:map", "tag:yaml.org,2002:null"}:
             raise LoadError(f"Expected a mapping at the top level of {self._location(node, ())}")
         self._validate(node, (), set())
@@ -47,6 +56,7 @@ class StrictSafeLoader(yaml.SafeLoader):
         if id(node) in active:
             raise LoadError(f"Recursive YAML structure in {location}")
         active.add(id(node))
+        self.origins[path] = (self._source_location(node),)
         try:
             if isinstance(node, yaml.MappingNode) and node.tag == "tag:yaml.org,2002:map":
                 self._validate_mapping(node, path, active)
@@ -83,21 +93,26 @@ class StrictSafeLoader(yaml.SafeLoader):
             child_path = (*path, key.value)
             if key.value in seen:
                 first = seen[key.value].start_mark
-                raise DuplicateKeyError(
-                    child_path,
-                    f"Duplicate key in {self._location(key, child_path)}; "
-                    f"first defined at line {first.line + 1}, column {first.column + 1}",
+                raise _annotate_duplicate(
+                    DuplicateKeyError(
+                        child_path,
+                        f"Duplicate key in {self._location(key, child_path)}; "
+                        f"first defined at line {first.line + 1}, column {first.column + 1}",
+                    ),
+                    (self._source_location(seen[key.value]),),
+                    (self._source_location(key),),
                 )
             seen[key.value] = key
             self._validate(value, child_path, active)
 
 
-def _parse(text: str, *, origin: str) -> Document:
+def _parse(text: str, *, origin: str) -> _SourceDocument:
     loader: StrictSafeLoader | None = None
     try:
         loader = StrictSafeLoader(text)
         loader.origin = origin
         data = loader.get_single_data()
+        origins = loader.origins
     except yaml.YAMLError as error:
         raise LoadError(f"Failed to parse YAML from {origin}: {error}") from error
     finally:
@@ -105,16 +120,21 @@ def _parse(text: str, *, origin: str) -> Document:
             loader.dispose()
 
     if data is None:
-        return {}
+        return _SourceDocument({}, origins)
     if not isinstance(data, dict):
         raise LoadError(
             f"Expected a mapping at the top level of {origin}, got {type(data).__name__}"
         )
-    return data
+    return _SourceDocument(data, origins)
 
 
 def load_path(path: str | Path) -> Document:
     """Load a single YAML file into a raw document tree."""
+    return _load_path(path).data
+
+
+def _load_path(path: str | Path) -> _SourceDocument:
+    """Load a file and retain marks for the internal pipeline."""
     path = Path(path)
     try:
         text = path.read_text(encoding="utf-8")
