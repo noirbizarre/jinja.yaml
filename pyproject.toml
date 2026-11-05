@@ -148,6 +148,9 @@ disable = [
     # Link fragments should be valid heading IDs.
     # https://rumdl.dev/md051/
     "MD051",
+    # Aligned table
+    # https://rumdl.dev/md060/
+    "MD060",
 ]
 
 # Unordered list marker style.
