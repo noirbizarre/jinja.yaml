@@ -18,6 +18,7 @@ see.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, cast
 
 from jinja2 import TemplateError, TemplateSyntaxError, Undefined, UndefinedError
@@ -33,6 +34,7 @@ from .exceptions import (
     TemplateEvaluationError,
 )
 from .graph import DependencyGraph
+from .provenance import _annotate_resolution, _Provenance, _SourceDocument
 from .types import Document, KeyPath, MappingClass, Namespaces, Node
 
 __all__ = ["resolve"]
@@ -51,9 +53,24 @@ def resolve(
     :class:`dict`. Pass any :class:`~collections.abc.MutableMapping` subclass to
     control the concrete type of the returned document and its nested mappings.
     """
+    return _resolve(
+        _SourceDocument(document),
+        namespaces=namespaces,
+        environment=environment,
+        mapping_cls=mapping_cls,
+    ).data
+
+
+def _resolve(
+    document: _SourceDocument,
+    *,
+    namespaces: Namespaces | None = None,
+    environment: Environment | None = None,
+    mapping_cls: MappingClass = dict,
+) -> _SourceDocument:
     namespaces = namespaces or {}
     environment = environment or Environment()
-    _check_namespace_collisions(document, namespaces)
+    _check_namespace_collisions(document.data, namespaces)
     resolver = _Resolver(document, namespaces, environment, mapping_cls)
     return resolver.run()
 
@@ -69,12 +86,14 @@ class _Resolver:
 
     def __init__(
         self,
-        document: Document,
+        document: _SourceDocument,
         namespaces: Namespaces,
         environment: Environment,
         mapping_cls: MappingClass,
     ) -> None:
-        self._document = document
+        self._document = document.data
+        self._origins = document.origins
+        self._resolved_origins: _Provenance = {}
         self._namespaces = namespaces
         self._env = environment
         self._mapping_cls = mapping_cls
@@ -83,15 +102,21 @@ class _Resolver:
         self._graph = DependencyGraph()
         self._references: dict[KeyPath, tuple[str, ...]] = {}
 
-    def run(self) -> Document:
+    def _error(self, error: ResolutionError) -> ResolutionError:
+        locations = self._origins.get(error.key_path, ()) if error.key_path is not None else ()
+        return _annotate_resolution(error, locations)
+
+    def run(self) -> _SourceDocument:
         self._build_graph(self._document, path=())
         cycle = self._graph.find_cycle()
         if cycle is not None:
-            raise CircularReferenceError(cycle)
+            raise self._error(CircularReferenceError(cycle))
         resolved = self._mapping_cls()
         for key, value in self._document.items():
             resolved[key] = self._resolve_node(value, (key,))
-        return cast("Document", resolved)
+        if () in self._origins:
+            self._resolved_origins[()] = self._origins[()]
+        return _SourceDocument(cast("Document", resolved), self._resolved_origins)
 
     # -- dependency graph -------------------------------------------------
 
@@ -119,13 +144,17 @@ class _Resolver:
             references = tuple(sorted(self._env.referenced_variables(source)))
         except TemplateSyntaxError as error:
             template = f" in template {error.name!r}" if error.name else ""
-            raise InvalidTemplateError(
-                path,
-                f"{error}{template}",
-                location=SourceLocation(error.filename or error.name, error.lineno),
+            raise self._error(
+                InvalidTemplateError(
+                    path,
+                    f"{error}{template}",
+                    location=SourceLocation(error.filename or error.name, error.lineno),
+                )
             ) from error
         except (TemplateError, TypeError) as error:
-            raise InvalidTemplateError(path, f"Failed to analyze template: {error}") from error
+            raise self._error(
+                InvalidTemplateError(path, f"Failed to analyze template: {error}")
+            ) from error
         self._references[path] = references
         return references
 
@@ -136,7 +165,7 @@ class _Resolver:
             return self._cache[path]
         if path in self._stack:
             cycle = [*self._stack[self._stack.index(path) :], path]
-            raise CircularReferenceError(cycle)
+            raise self._error(CircularReferenceError(cycle))
 
         self._stack.append(path)
         try:
@@ -145,11 +174,16 @@ class _Resolver:
             self._stack.pop()
 
         self._cache[path] = resolved
+        if path in self._origins:
+            self._resolved_origins[path] = self._origins[path]
         return resolved
 
     def _resolve_value(self, node: Node, path: KeyPath) -> Node:
         if isinstance(node, str) and self._env.is_template(node):
-            return self._render(node, path)
+            result = self._render(node, path)
+            if locations := self._origins.get(path):
+                self._record_produced_origins(result, path, locations)
+            return result
         if isinstance(node, dict):
             result = self._mapping_cls()
             for key, value in node.items():
@@ -158,6 +192,29 @@ class _Resolver:
         if isinstance(node, list):
             return [self._resolve_node(value, (*path, index)) for index, value in enumerate(node)]
         return node
+
+    def _record_produced_origins(
+        self,
+        node: Any,
+        path: KeyPath,
+        locations: tuple[SourceLocation, ...],
+    ) -> None:
+        """Generated descendants belong to the template, not its dependencies."""
+        active: set[int] = set()
+        pending: list[tuple[Any, KeyPath, bool]] = [(node, path, False)]
+        while pending:
+            node, path, leaving = pending.pop()
+            if leaving:
+                active.remove(id(node))
+                continue
+            self._resolved_origins[path] = locations
+            if id(node) in active:
+                continue
+            if isinstance(node, (Mapping, list)):
+                active.add(id(node))
+                pending.append((node, path, True))
+                children = node.items() if isinstance(node, Mapping) else enumerate(node)
+                pending.extend((value, (*path, key), False) for key, value in children)
 
     def _render(self, source: str, path: KeyPath) -> Node:
         # Static sources were validated during graph construction. Dynamic
@@ -175,22 +232,26 @@ class _Resolver:
             # Preserve domain errors raised by caller-provided extensions.
             raise
         except UndefinedError as error:
-            raise MissingReferenceError(
-                path, message=str(error), dependency_chain=tuple(self._stack)
+            raise self._error(
+                MissingReferenceError(path, message=str(error), dependency_chain=tuple(self._stack))
             ) from error
         except TemplateSyntaxError as error:
-            raise InvalidTemplateError(
-                path,
-                str(error),
-                dependency_chain=tuple(self._stack),
-                location=SourceLocation(error.filename or error.name, error.lineno),
+            raise self._error(
+                InvalidTemplateError(
+                    path,
+                    str(error),
+                    dependency_chain=tuple(self._stack),
+                    location=SourceLocation(error.filename or error.name, error.lineno),
+                )
             ) from error
         except Exception as error:
             # Jinja lets Python errors from operators, filters and globals escape.
-            raise TemplateEvaluationError(
-                path,
-                f"Evaluation failed ({type(error).__name__}): {error}",
-                dependency_chain=tuple(self._stack),
+            raise self._error(
+                TemplateEvaluationError(
+                    path,
+                    f"Evaluation failed ({type(error).__name__}): {error}",
+                    dependency_chain=tuple(self._stack),
+                )
             ) from error
 
     def _build_context(self, source: str, path: KeyPath) -> dict[str, Any]:
@@ -206,5 +267,7 @@ class _Resolver:
             if name in self._document:
                 context[name] = self._resolve_node(self._document[name], (name,))
             elif name not in self._namespaces:
-                raise MissingReferenceError(path, name, dependency_chain=tuple(self._stack))
+                raise self._error(
+                    MissingReferenceError(path, name, dependency_chain=tuple(self._stack))
+                )
         return context
