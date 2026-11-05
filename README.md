@@ -188,6 +188,47 @@ except CircularReferenceError as error:
 # Circular reference detected: a -> b -> c -> a
 ```
 
+#### Loading and validation errors
+
+Input documents must be mappings with string keys at every depth. Values may
+be nested mappings, lists, strings, integers, floats, booleans, or nulls. Empty
+files and explicit YAML null documents (`null` or `~`) load as empty mappings.
+Other top-level values, including lists, are rejected.
+
+These rules also apply to `load_dict`, which copies its input without mutating
+it. Dates/timestamps, binary data, sets, tuples, arbitrary Python objects, and
+unsupported YAML tags are rejected. Quote date-like values such as
+`"2026-01-01"` to keep them as strings. Nonrecursive YAML aliases and shared
+in-memory containers are accepted; recursive structures are rejected. YAML
+merge keys (`<<`) are unsupported; a quoted `"<<"` is an ordinary string key.
+Validation here concerns loaded document data, not injected namespaces or
+values produced by template evaluation.
+
+Repeated keys within a YAML mapping raise `DuplicateKeyError`, even when their
+values are identical. Its `.path` identifies the full nested key, including
+list indices. When merging separate documents, identical leaf values are
+allowed, but conflicting values raise `DuplicateKeyError`.
+
+File-reading failures, invalid YAML, and unsupported document shapes raise
+`LoadError` (`DuplicateKeyError` is also a `LoadError`). File errors identify
+the source filename; validation errors include a logical key path and, when
+available, one-based line and column numbers. Duplicate errors also identify
+the first definition. Alias diagnostics use the anchor's definition location.
+In-memory errors identify the logical path without source coordinates.
+Underlying parser, filesystem, and decoding exceptions are preserved as
+`error.__cause__`.
+
+```python
+from jinja_yaml import LoadError, load_file
+
+try:
+    load_file("config.jinja.yaml")
+except LoadError as error:
+    print(error)
+# For a repeated key, for example:
+# Duplicate key in config.jinja.yaml, line 3, column 5 at 'items[0].key'; first defined at line 2, column 5
+```
+
 ## Architecture
 
 The library operates in four independent phases, each backed by a focused
