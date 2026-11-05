@@ -44,6 +44,29 @@ def test_load_files_reports_cross_document_duplicates(
         load_files([first, second])
 
 
+def test_load_file_reports_validation_error(write_yaml: Callable[[str, str], Path]) -> None:
+    path = write_yaml("invalid.yaml", "data: 2026-01-01\n")
+    with pytest.raises(LoadError) as excinfo:
+        load_file(path)
+    assert str(path) in str(excinfo.value)
+    assert "line 1, column 7" in str(excinfo.value)
+    assert excinfo.value.__cause__ is not None
+
+
+def test_load_files_identifies_invalid_file(write_yaml: Callable[[str, str], Path]) -> None:
+    first = write_yaml("valid.yaml", "data: 1\n")
+    second = write_yaml("invalid.yaml", "items: {key: 1, key: 1}\n")
+    with pytest.raises(DuplicateKeyError) as excinfo:
+        load_files([first, second])
+    assert str(second) in str(excinfo.value)
+    assert excinfo.value.path == ("items", "key")
+
+
+def test_load_dict_validates_before_resolution() -> None:
+    with pytest.raises(LoadError, match="Unsupported value type bytes"):
+        load_dict({"data": b"value"})
+
+
 def test_load_dispatches_on_dict() -> None:
     assert load({"a": 1}) == {"a": 1}
 

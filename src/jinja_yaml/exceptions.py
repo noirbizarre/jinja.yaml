@@ -26,10 +26,11 @@ class MergeError(JinjaYamlError):
 
 
 class DuplicateKeyError(LoadError, MergeError):
-    """Raised when the same key is defined twice with conflicting values.
+    """Raised for repeated YAML keys or conflicting merged values.
 
     This covers both duplicate keys *within* a single YAML document and
     conflicting leaf values discovered while *merging* several documents.
+    Within a YAML mapping, even identical repeated values are rejected.
     """
 
     def __init__(self, path: KeyPath, message: str | None = None) -> None:
