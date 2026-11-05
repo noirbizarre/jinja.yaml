@@ -202,7 +202,8 @@ module under `src/jinja_yaml/`:
 
 Supporting modules:
 
-- `graph.py` — a small, generic directed dependency graph with cycle detection.
+- `graph.py` — a generic dependency graph using `graphlib` for dependency-first
+  ordering and cycle detection.
 - `environment.py` — the configurable Jinja `Environment` (native types,
   strict undefined, custom filters/tests/globals).
 - `exceptions.py` — the exception hierarchy.
@@ -211,16 +212,61 @@ Supporting modules:
 
 ### How resolution works
 
-1. The merged document is walked to collect every templated leaf and its key
-   path.
+1. The merged document is walked to collect every value and its key path.
 2. For each leaf, the referenced top-level keys are discovered **statically**
-   from Jinja's AST, and recorded as edges in a dependency graph.
+   using Jinja's metadata analysis, and recorded as edges in a dependency graph.
+   Containers also depend on their immediate children. An edge `a -> b` means
+   that `a` depends on `b`.
 3. Cycles are detected up-front and reported as `CircularReferenceError` with
-   the offending path (`a -> b -> c -> a`).
+   a deterministic closed path (`a -> b -> c -> a`), including nested keys and
+   list indices where applicable.
 4. Values are resolved **lazily** and **cached**, rendering through a
    `NativeEnvironment` so single-expression values keep their native type. A
    runtime resolution stack acts as a defensive net for dependencies introduced
    by custom filters or globals that static analysis cannot see.
+
+### Static template analysis and its limits
+
+References use **whole-root resolution**: `{{ settings.host }}` depends on the
+entire `settings` mapping, including every child. A field referencing a sibling
+through its own root therefore remains circular. Injected namespaces and Jinja
+environment globals are not configuration graph nodes.
+
+Configure a Jinja loader that provides template source to discover dependencies
+in statically named templates:
+
+```python
+from jinja2 import DictLoader
+from jinja_yaml import Environment, load_dict
+
+env = Environment(loader=DictLoader({"message": "Hello {{ name }}!"}))
+result = load_dict(
+    {"greeting": '{% include "message" %}', "name": "world"},
+    environment=env,
+)
+assert result["greeting"] == "Hello world!"
+```
+
+Static `include`, `import`, `from ... import`, and `extends` references are
+followed transitively. Includes share context by default; imports do not.
+Explicit `with context` and `without context` are respected, and caller-local
+variables (such as loop variables or preceding assignments) do not become
+configuration dependencies. Include fallback lists use the first available
+template; missing includes with `ignore missing` contribute no dependencies.
+Analysis results are reused when constructing each value's render context.
+
+Analysis is conservative, not execution-path-aware: references in untaken
+branches and overridden parent blocks can still introduce dependencies or
+missing-key errors. Required static templates are checked before rendering;
+missing templates and invalid syntax report the owning configuration path.
+Recursive static template-reference chains are unsupported and report the
+template chain rather than recursing indefinitely during analysis.
+
+Dynamic references such as `{% include template_name %}` retain Jinja's runtime
+behavior. The name expression is analyzed, but additional variables used only
+inside the selected template are **not** discovered automatically. Such targets
+can use Jinja globals or context already supplied by the caller; otherwise they
+may fail at render time. Runtime dependency discovery is not provided.
 
 ## Roadmap
 

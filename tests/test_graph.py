@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from graphlib import CycleError
+from itertools import pairwise
+
+import pytest
+
 from jinja_yaml.graph import DependencyGraph
 
 
@@ -54,3 +59,39 @@ def test_cycle_path_is_closed() -> None:
     graph.add_edge(("c",), ("a",))
     cycle = graph.find_cycle()
     assert cycle == [("a",), ("b",), ("c",), ("a",)]
+
+
+def test_dependency_first_order() -> None:
+    graph = DependencyGraph()
+    graph.add_edge(("a",), ("b",))
+    graph.add_edge(("b",), ("c",))
+    graph.add_edge(("a",), ("c",))
+    graph.add_node(("independent",))
+    order = graph.static_order()
+    assert order.index(("c",)) < order.index(("b",)) < order.index(("a",))
+    assert ("independent",) in order
+    assert graph.dependencies(("b",)) == [("c",)]
+
+
+def test_long_graph_does_not_require_recursive_traversal() -> None:
+    graph = DependencyGraph()
+    for index in range(2000):
+        graph.add_edge((index,), (index + 1,))
+    assert graph.find_cycle() is None
+    assert graph.static_order()[0] == (2000,)
+
+
+def test_cycle_direction_and_selection_are_stable() -> None:
+    graph = DependencyGraph()
+    graph.add_edge(("prefix",), ("a",))
+    graph.add_edge(("a",), ("b",))
+    graph.add_edge(("b",), ("c",))
+    graph.add_edge(("c",), ("a",))
+    graph.add_edge(("b",), ("b",))
+    cycle = graph.find_cycle()
+    assert cycle == graph.find_cycle()
+    assert cycle is not None
+    for dependent, dependency in pairwise(cycle):
+        assert dependency in graph.dependencies(dependent)
+    with pytest.raises(CycleError):
+        graph.static_order()
