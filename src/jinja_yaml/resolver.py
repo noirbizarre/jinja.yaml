@@ -2,9 +2,10 @@
 
 The resolver ties the other modules together:
 
-1. Walk the merged tree, collecting every templated leaf and its key path.
+1. Walk the merged tree, recording value paths and container dependencies.
 2. Statically discover, for each leaf, the top-level keys it references and
-   record the corresponding edges in a :class:`~jinja_yaml.graph.DependencyGraph`.
+   record the corresponding edges in a :class:`~jinja_yaml.graph.DependencyGraph`,
+   including requirements from statically referenced loader templates.
 3. Detect cycles up-front and raise :class:`CircularReferenceError`.
 4. Resolve values lazily, caching each resolved node, and rendering through the
    :class:`~jinja_yaml.environment.Environment` so single-expression templates
@@ -19,7 +20,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from jinja2 import TemplateSyntaxError, UndefinedError
+from jinja2 import TemplateError, TemplateSyntaxError
 
 from .environment import Environment
 from .exceptions import (
@@ -77,6 +78,7 @@ class _Resolver:
         self._cache: dict[KeyPath, Node] = {}
         self._stack: list[KeyPath] = []
         self._graph = DependencyGraph()
+        self._references: dict[KeyPath, tuple[str, ...]] = {}
 
     def run(self) -> Document:
         self._build_graph(self._document, path=())
@@ -91,23 +93,36 @@ class _Resolver:
     # -- dependency graph -------------------------------------------------
 
     def _build_graph(self, node: Node, *, path: KeyPath) -> None:
-        if isinstance(node, str) and self._env.is_template(node):
+        if path:
             self._graph.add_node(path)
+        if isinstance(node, str) and self._env.is_template(node):
             for name in self._referenced_variables(node, path):
                 if name in self._document:
                     self._graph.add_edge(path, (name,))
         elif isinstance(node, dict):
             for key, value in node.items():
+                if path:
+                    self._graph.add_edge(path, (*path, key))
                 self._build_graph(value, path=(*path, key))
         elif isinstance(node, list):
             for index, value in enumerate(node):
+                self._graph.add_edge(path, (*path, index))
                 self._build_graph(value, path=(*path, index))
 
-    def _referenced_variables(self, source: str, path: KeyPath) -> set[str]:
+    def _referenced_variables(self, source: str, path: KeyPath) -> tuple[str, ...]:
+        if path in self._references:
+            return self._references[path]
         try:
-            return self._env.referenced_variables(source)
+            references = tuple(sorted(self._env.referenced_variables(source)))
         except TemplateSyntaxError as error:
-            raise InvalidTemplateError(path, error.message or str(error)) from error
+            template = f" in template {error.name!r}" if error.name else ""
+            raise InvalidTemplateError(path, f"{error}{template}") from error
+        except (TemplateError, TypeError) as error:
+            raise ResolutionError(
+                f"Failed to analyze {format_key_path(path)!r}: {error}"
+            ) from error
+        self._references[path] = references
+        return references
 
     # -- resolution -------------------------------------------------------
 
@@ -140,13 +155,13 @@ class _Resolver:
         return node
 
     def _render(self, source: str, path: KeyPath) -> Node:
-        # Syntax is validated up-front in ``_build_context`` via static parsing,
-        # so only render-time (undefined) failures can surface here.
+        # Static sources were validated during graph construction. Dynamic
+        # loader targets can still fail at render time.
         context = self._build_context(source, path)
         try:
             template = self._env.from_string(source)
             return template.render(context)
-        except UndefinedError as error:
+        except TemplateError as error:
             raise ResolutionError(
                 f"Failed to resolve {format_key_path(path)!r}: {error}"
             ) from error

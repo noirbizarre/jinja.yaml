@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from jinja_yaml import load_dict
+from jinja_yaml.environment import Environment
 from jinja_yaml.exceptions import CircularReferenceError
 
 
@@ -33,3 +34,24 @@ def test_cycle_through_nested_structure() -> None:
     }
     with pytest.raises(CircularReferenceError):
         load_dict(document)
+
+
+def test_nested_list_cycle_is_detected_before_rendering() -> None:
+    rendered = []
+    environment = Environment(globals={"record": lambda: rendered.append(True)})
+    document = {"first": "{{ record() }}", "a": ["{{ b }}"], "b": "{{ a[0] }}"}
+    with pytest.raises(CircularReferenceError) as excinfo:
+        load_dict(document, environment=environment)
+    assert str(excinfo.value) == "Circular reference detected: a -> a[0] -> b -> a"
+    assert rendered == []
+
+
+def test_sibling_references_still_require_the_whole_root() -> None:
+    with pytest.raises(CircularReferenceError):
+        load_dict({"settings": {"host": "localhost", "url": "{{ settings.host }}"}})
+
+
+def test_multiple_references_have_a_stable_cycle_path() -> None:
+    with pytest.raises(CircularReferenceError) as excinfo:
+        load_dict({"a": "{{ c }} {{ b }}", "b": "{{ a }}", "c": "{{ a }}"})
+    assert excinfo.value.path == [("a",), ("b",), ("a",)]

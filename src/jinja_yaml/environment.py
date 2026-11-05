@@ -16,8 +16,9 @@ from collections.abc import Mapping
 from typing import Any
 
 from jinja2 import StrictUndefined, Undefined
-from jinja2 import meta as jinja_meta
 from jinja2.nativetypes import NativeEnvironment
+
+from ._analysis import TemplateAnalysis
 
 __all__ = ["Environment"]
 
@@ -57,7 +58,7 @@ class Environment(NativeEnvironment):
 
         This is a *static* analysis performed on the parsed AST; the template is
         not rendered. Dotted access such as ``data.domain`` surfaces its root
-        (``data``).
+        (``data``). Static loader references are followed with Jinja's context
+        rules; dynamic targets cannot contribute additional dependencies.
         """
-        ast = self.parse(source)
-        return jinja_meta.find_undeclared_variables(ast)
+        return TemplateAnalysis(self).variables(source)

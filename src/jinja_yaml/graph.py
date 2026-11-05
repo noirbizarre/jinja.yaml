@@ -11,6 +11,8 @@ directly onto document locations.
 
 from __future__ import annotations
 
+from graphlib import CycleError, TopologicalSorter
+
 from .types import KeyPath
 
 __all__ = ["DependencyGraph"]
@@ -47,29 +49,17 @@ class DependencyGraph:
         The returned path is closed, i.e. its first and last elements are equal,
         so it renders naturally as ``a -> b -> c -> a``.
         """
-        visited: set[KeyPath] = set()
-        stack: list[KeyPath] = []
-        on_stack: set[KeyPath] = set()
-
-        def visit(node: KeyPath) -> list[KeyPath] | None:
-            visited.add(node)
-            stack.append(node)
-            on_stack.add(node)
-            for dependency in self._edges.get(node, []):
-                if dependency in on_stack:
-                    start = stack.index(dependency)
-                    return [*stack[start:], dependency]
-                if dependency not in visited:
-                    cycle = visit(dependency)
-                    if cycle is not None:
-                        return cycle
-            stack.pop()
-            on_stack.discard(node)
-            return None
-
-        for node in self._edges:
-            if node not in visited:
-                cycle = visit(node)
-                if cycle is not None:
-                    return cycle
+        try:
+            TopologicalSorter(self._edges).prepare()
+        except CycleError as error:
+            # graphlib follows successors; our public paths follow dependencies.
+            cycle = list(reversed(error.args[1][:-1]))
+            positions = {node: index for index, node in enumerate(self._edges)}
+            start = min(range(len(cycle)), key=lambda index: positions[cycle[index]])
+            cycle = cycle[start:] + cycle[:start]
+            return [*cycle, cycle[0]]
         return None
+
+    def static_order(self) -> tuple[KeyPath, ...]:
+        """Return dependency-first order; raise ``CycleError`` for a cycle."""
+        return tuple(TopologicalSorter(self._edges).static_order())
