@@ -223,10 +223,7 @@ class _Resolver:
         try:
             template = self._env.from_string(source)
             result = template.render(context)
-            if isinstance(result, Undefined):
-                # Native rendering may return Undefined without using it.
-                # StrictUndefined raises here with the original lookup detail.
-                raise UndefinedError(str(result) or "Template returned an undefined value")
+            _check_defined(result)
             return result
         except ResolutionError:
             # Preserve domain errors raised by caller-provided extensions.
@@ -271,3 +268,23 @@ class _Resolver:
                     MissingReferenceError(path, name, dependency_chain=tuple(self._stack))
                 )
         return context
+
+
+def _check_defined(result: Any) -> None:
+    """Check native containers without copying them or following cycles."""
+    pending = [result]
+    visited: set[int] = set()
+    while pending:
+        value = pending.pop()
+        if isinstance(value, Undefined):
+            # Native rendering need not use the Undefined, even under StrictUndefined.
+            raise UndefinedError(str(value) or "Template returned an undefined value")
+        if id(value) in visited:
+            continue
+        if isinstance(value, Mapping):
+            visited.add(id(value))
+            pending.extend(value.keys())
+            pending.extend(value.values())
+        elif isinstance(value, (list, tuple, set, frozenset)):
+            visited.add(id(value))
+            pending.extend(value)
