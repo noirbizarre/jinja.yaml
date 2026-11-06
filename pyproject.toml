@@ -224,4 +224,4 @@ major_version_zero = true
 #
 # Add dependencies, tool configuration below this line. The
 # template owns everything above it and will keep updating it; everything here
-# is yours, and Git's 3-way merge preserves it across `git tpl update`.
+# is yours, and Git's 3-way merge preserves it across `git tpl merge`.
