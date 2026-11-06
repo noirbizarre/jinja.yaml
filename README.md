@@ -462,15 +462,18 @@ mise run test
 # Run the test suite with coverage
 mise run cover
 
-# Lint (Ruff + hooks) and type-check
+# Lint (Ruff) and type-check
 mise run lint
-mise run typing
+mise run typecheck
+
+# Run the file-validation hooks
+mise run hooks
 
 # Format the code
 mise run format
 
-# Run the full quality gate (lint + typing + tests)
-mise run check
+# Run the core Python quality checks (format, lint, types, coverage)
+mise run ci
 ```
 
 Commits follow the [Conventional Commits][conventional] specification, enforced
