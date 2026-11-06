@@ -9,10 +9,28 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from jinja2 import TemplateNotFound, TemplateRuntimeError, meta, nodes
+from jinja2.compiler import CodeGenerator, Frame
+from jinja2.meta import TrackingCodeGenerator
 from jinja2.visitor import NodeTransformer
 
 if TYPE_CHECKING:
     from .environment import Environment
+
+
+class _ExternalReads(TrackingCodeGenerator):
+    """Collect context reads without excluding names that also have globals."""
+
+    def enter_frame(self, frame: Frame) -> None:
+        CodeGenerator.enter_frame(self, frame)
+        for action, name in frame.symbols.loads.values():
+            if action == "resolve":
+                self.undeclared_identifiers.add(name)
+
+
+def _external_reads(tree: nodes.Template, environment: Environment) -> set[str]:
+    generator = _ExternalReads(environment)
+    generator.visit(tree)
+    return generator.undeclared_identifiers
 
 
 class TemplateAnalysis:
@@ -30,14 +48,14 @@ class TemplateAnalysis:
         # Dynamic references yield None; their name expressions are still
         # analyzed normally, but their eventual targets remain runtime-only.
         if not list(meta.find_referenced_templates(tree)):
-            return meta.find_undeclared_variables(tree)
+            return _external_reads(tree, self.environment)
         transformer = _References(self, name)
         # Parsing returns a fresh tree; only variable requirements are cached.
         tree = transformer.visit(tree)
         # Parent roots run after the child's top-level assignments, not at the
         # textual position of the extends tag.
         tree.body.extend(_reads(transformer.parent_variables, tree.lineno))
-        return meta.find_undeclared_variables(tree)
+        return _external_reads(tree, self.environment)
 
     def referenced(self, names: list[str], parent: str | None, *, ignore: bool) -> set[str]:
         loader = self.environment.loader

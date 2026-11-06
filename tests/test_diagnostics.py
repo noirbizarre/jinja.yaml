@@ -37,7 +37,15 @@ def test_missing_root_reports_dependency_chain_and_nested_key() -> None:
 
 
 @pytest.mark.parametrize(
-    "source", ["{{ data.missing }}", "prefix-{{ data.missing }}", "{{ data[3] }}"]
+    "source",
+    [
+        "{{ data.missing }}",
+        "prefix-{{ data.missing }}",
+        "{{ data[3] }}",
+        "{{ [data.missing] }}",
+        "{{ {'nested': [data.missing]} }}",
+        "{{ (1, data.missing) }}",
+    ],
 )
 def test_missing_nested_lookup_preserves_jinja_cause(source: str) -> None:
     with pytest.raises(MissingReferenceError) as excinfo:
@@ -48,6 +56,40 @@ def test_missing_nested_lookup_preserves_jinja_cause(source: str) -> None:
     assert error.reference is None
     assert isinstance(error.__cause__, UndefinedError)
     assert str(error.__cause__) in str(error)
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_native_container_validation_handles_deep_shared_cycles(missing: bool) -> None:
+    from typing import Any
+
+    env = Environment()
+    shared: list[Any] = []
+    shared.append(shared)
+    value: Any = shared
+    for _ in range(1500):
+        value = [value]
+    if missing:
+        shared.append(env.undefined(name="missing"))
+    env = Environment(globals={"make": lambda: [value, shared]})
+    if missing:
+        with pytest.raises(MissingReferenceError, match="missing") as excinfo:
+            load_dict({"result": "{{ make() }}"}, environment=env)
+        assert excinfo.value.key_path == ("result",)
+        assert isinstance(excinfo.value.__cause__, UndefinedError)
+    else:
+        result = load_dict({"result": "{{ make() }}"}, environment=env)
+        rendered = result["result"]
+        assert isinstance(rendered, list)
+        assert rendered[1] is shared
+
+
+def test_undefined_mapping_key_is_rejected() -> None:
+    from jinja2 import Undefined
+
+    # Non-strict Undefined can be hashed, so it can escape as a native dict key.
+    env = Environment(globals={"make": lambda: {Undefined(name="missing"): 1}})
+    with pytest.raises(MissingReferenceError):
+        load_dict({"result": "{{ make() }}"}, environment=env)
 
 
 def test_default_filter_handles_missing_nested_lookup() -> None:

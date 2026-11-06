@@ -2,8 +2,8 @@
 
 A dedicated :class:`Environment` subclasses Jinja's
 :class:`~jinja2.nativetypes.NativeEnvironment`, which returns native Python
-types when a template consists of a single expression (so ``"{{ port }}"``
-yields an ``int`` rather than a ``str``). It defaults to
+types rather than only text. Literal-looking rendered strings can also become
+Python values, so a referenced string's type is not always preserved. It defaults to
 :class:`~jinja2.StrictUndefined` so that references to unknown keys fail loudly.
 
 The environment is the extension point of the library: custom filters, tests,
@@ -11,6 +11,8 @@ globals and functions can be injected without touching the resolver.
 """
 
 from __future__ import annotations
+
+import re
 
 from collections.abc import Mapping
 from typing import Any
@@ -21,8 +23,6 @@ from jinja2.nativetypes import NativeEnvironment
 from ._analysis import TemplateAnalysis
 
 __all__ = ["Environment"]
-
-_BLOCK_MARKERS = ("{{", "{%", "{#")
 
 
 class Environment(NativeEnvironment):
@@ -51,7 +51,19 @@ class Environment(NativeEnvironment):
 
     def is_template(self, value: str) -> bool:
         """Return whether ``value`` contains any Jinja construct."""
-        return any(marker in value for marker in _BLOCK_MARKERS)
+        markers = (
+            self.variable_start_string,
+            self.block_start_string,
+            self.comment_start_string,
+            self.line_comment_prefix,
+        )
+        if any(marker is not None and marker in value for marker in markers):
+            return True
+        prefix = self.line_statement_prefix
+        return (
+            prefix is not None
+            and re.search(rf"(?:^|[\r\n])[ \t\v]*{re.escape(prefix)}", value) is not None
+        )
 
     def referenced_variables(self, source: str) -> set[str]:
         """Return the set of undeclared (root) variables referenced by ``source``.

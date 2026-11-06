@@ -133,7 +133,7 @@ description = "Run every prek hook over every file"
 run = "prek run --all-files --show-diff-on-failure"
 
 [tasks.ci]
-description = "Everything CI runs, locally"
+description = "Core Python quality checks: formatting, lint, types and coverage"
 depends = ["format:check", "lint", "typecheck", "cover"]
 
 # --- Template -----------------------------------------------------------------
@@ -174,7 +174,7 @@ git tpl diff --exit-code --stat
 #
 # Add your own tasks below this line. The template owns everything above it and
 # will keep updating it; everything here is yours, and Git's 3-way merge
-# preserves it across `git tpl update`.
+# preserves it across `git tpl merge`.
 #
 # Open any multi-line `run` block with `#!/usr/bin/env bash`. Without one mise
 # runs it through `sh`, which is dash on a GitHub runner — `set -o pipefail`

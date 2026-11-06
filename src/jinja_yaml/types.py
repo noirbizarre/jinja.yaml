@@ -20,7 +20,10 @@ type Node = Scalar | list["Node"] | dict[str, "Node"]
 """Any node in a document tree: a scalar, a list or a mapping."""
 
 type Document = dict[str, Node]
-"""A logical document: a mapping of top-level keys to nodes."""
+"""A raw document before template resolution."""
+
+type ResolvedDocument = MutableMapping[str, Any]
+"""A resolved mapping whose template-produced values may be arbitrary objects."""
 
 type Namespaces = dict[str, Any]
 """Externally injected namespaces made available to templates."""

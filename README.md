@@ -65,8 +65,8 @@ Key properties:
   later in the document.
 - **Dependency-aware** — references are discovered statically and resolved
   lazily through a dependency graph, with caching.
-- **Type-preserving** — a value that is a single expression keeps its native
-  type (`int`, `list`, `dict`, ...).
+- **Native rendering** — templates can produce Python values (`int`, `list`,
+  `dict`, ...), including conversion of literal-looking strings.
 - **Strict by default** — missing references, conflicting definitions and circular
   references raise errors; cross-source overrides are explicitly opt-in.
 
@@ -100,7 +100,10 @@ config = load(["base.jinja.yaml", "overrides.jinja.yaml"], merge_strategy="overr
 config = load({"key": "{{ other }}", "other": "value"})
 ```
 
-Every function returns a fully-resolved plain `dict`.
+By default, every function returns a fully resolved plain `dict`. Pass a
+zero-argument `MutableMapping` subclass as `mapping_cls` to customize the document
+and its structural nested mappings. Mappings produced by template evaluation
+retain their native type and identity; they are not converted by `mapping_cls`.
 
 > [!TIP]
 > Any file extension works, but we recommend `.jinja.yaml` (e.g.
@@ -136,13 +139,22 @@ load_dict(
 # }
 ```
 
-### Native types are preserved
+### Templates render native Python values
 
-A value consisting of a single expression keeps the referenced value's type:
+Jinja's native rendering can return Python values rather than text:
 
 ```python
 load_dict({"port": "{{ base }}", "base": 8080})
 # {"port": 8080, "base": 8080}    <- port is an int, not "8080"
+```
+
+This is not a guarantee that a referenced string keeps its type: rendered text
+that looks like a Python literal can be converted to that literal's value.
+Plain strings without template syntax bypass rendering and remain unchanged:
+
+```python
+load_dict({"base": "8080", "copy": "{{ base }}"})
+# {"base": "8080", "copy": 8080}
 ```
 
 ### Merge strategies
@@ -462,15 +474,18 @@ mise run test
 # Run the test suite with coverage
 mise run cover
 
-# Lint (Ruff + hooks) and type-check
+# Lint (Ruff) and type-check
 mise run lint
-mise run typing
+mise run typecheck
+
+# Run the file-validation hooks
+mise run hooks
 
 # Format the code
 mise run format
 
-# Run the full quality gate (lint + typing + tests)
-mise run check
+# Run the core Python quality checks (format, lint, types, coverage)
+mise run ci
 ```
 
 Commits follow the [Conventional Commits][conventional] specification, enforced
