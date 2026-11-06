@@ -120,3 +120,18 @@ def test_line_prefixes_are_detected() -> None:
     assert result["block"] == result["comment"] == 42
     with pytest.raises(CircularReferenceError):
         load_dict({"a": "% if a\n42\n% endif"}, environment=env)
+
+
+@pytest.mark.parametrize("value", ["'%'", "  '%'", "first\n'%'", "'%.*'"])
+def test_midline_statement_prefix_preserves_literal_strings(value: str) -> None:
+    env = Environment(line_statement_prefix="%")
+    assert not env.is_template(value)
+    assert load_dict({"value": value}, environment=env)["value"] == value
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n", "\r"])
+def test_indented_line_statement_prefix(newline: str) -> None:
+    env = Environment(line_statement_prefix="%.*")
+    value = newline.join([" \t%.* if base", "42", " \t%.* endif"])
+    assert env.is_template(value)
+    assert load_dict({"value": value, "base": True}, environment=env)["value"] == 42

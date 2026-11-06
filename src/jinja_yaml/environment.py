@@ -12,6 +12,8 @@ globals and functions can be injected without touching the resolver.
 
 from __future__ import annotations
 
+import re
+
 from collections.abc import Mapping
 from typing import Any
 
@@ -53,10 +55,15 @@ class Environment(NativeEnvironment):
             self.variable_start_string,
             self.block_start_string,
             self.comment_start_string,
-            self.line_statement_prefix,
             self.line_comment_prefix,
         )
-        return any(marker is not None and marker in value for marker in markers)
+        if any(marker is not None and marker in value for marker in markers):
+            return True
+        prefix = self.line_statement_prefix
+        return (
+            prefix is not None
+            and re.search(rf"(?:^|[\r\n])[ \t\v]*{re.escape(prefix)}", value) is not None
+        )
 
     def referenced_variables(self, source: str) -> set[str]:
         """Return the set of undeclared (root) variables referenced by ``source``.
