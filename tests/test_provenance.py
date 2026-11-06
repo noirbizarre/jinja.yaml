@@ -311,3 +311,78 @@ def test_extension_domain_error_is_preserved_with_file_metadata(
     assert excinfo.value is original
     assert original.source_locations == ()
     assert original.location is None
+
+
+def test_override_replaces_origins_and_removes_obsolete_descendants(
+    write_yaml: Callable[[str, str], Path],
+) -> None:
+    first = _load_path(
+        write_yaml(
+            "base.yaml",
+            "net: {port: 80, host: localhost}\nitems: [{old: 1}, 2]\nequal: [{x: 1}]\n",
+        )
+    )
+    second = _load_path(
+        write_yaml("override.yaml", "net: {port: 443}\nitems: []\nequal: [{x: 1}]\n")
+    )
+    result = _merge([first, second], merge_strategy="override")
+    assert result.data == {
+        "net": {"port": 443, "host": "localhost"},
+        "items": [],
+        "equal": [{"x": 1}],
+    }
+    assert result.origins[()] == (*first.origins[()], *second.origins[()])
+    assert result.origins[("net",)] == (*first.origins[("net",)], *second.origins[("net",)])
+    assert result.origins[("net", "host")] == first.origins[("net", "host")]
+    assert result.origins[("net", "port")] == second.origins[("net", "port")]
+    assert result.origins[("items",)] == second.origins[("items",)]
+    assert ("items", 0) not in result.origins
+    assert ("items", 0, "old") not in result.origins
+    assert ("items", 1) not in result.origins
+    for path in [("equal",), ("equal", 0), ("equal", 0, "x")]:
+        assert result.origins[path] == second.origins[path]
+
+
+def test_override_category_changes_then_recursive_merge_keep_only_live_origins(
+    write_yaml: Callable[[str, str], Path],
+) -> None:
+    first = _load_path(write_yaml("first.yaml", "value: {old: 1}\n"))
+    second = _load_path(write_yaml("second.yaml", "value: null\n"))
+    replaced = _merge([first, second], merge_strategy="override")
+    assert replaced.data == {"value": None}
+    assert ("value", "old") not in replaced.origins
+    third = _load_path(write_yaml("third.yaml", "value: {new: 2}\n"))
+    fourth = _load_path(write_yaml("fourth.yaml", "value: {more: 3}\n"))
+    result = _merge([replaced, third, fourth], merge_strategy="override")
+    assert result.data == {"value": {"new": 2, "more": 3}}
+    assert result.origins[("value",)] == (*third.origins[("value",)], *fourth.origins[("value",)])
+    assert result.origins[("value", "new")] == third.origins[("value", "new")]
+    assert result.origins[("value", "more")] == fourth.origins[("value", "more")]
+    assert ("value", "old") not in result.origins
+    # A replacement without metadata must also remove the old attribution.
+    unmarked = _merge([result, _SourceDocument({"value": []})], merge_strategy="override")
+    assert not any(path and path[0] == "value" for path in unmarked.origins)
+
+
+def test_override_equal_failing_templates_report_only_winning_source(
+    write_yaml: Callable[[str, str], Path],
+) -> None:
+    paths = [write_yaml(f"{name}.yaml", "value: '{{ missing }}'\n") for name in ["a", "b"]]
+    with pytest.raises(MissingReferenceError) as excinfo:
+        load_files(paths, merge_strategy="override")
+    assert excinfo.value.source_locations == (SourceLocation(str(paths[1]), 1, 8),)
+    assert excinfo.value.location == excinfo.value.source_locations[0]
+
+
+def test_override_alias_replacement_is_isolated(
+    write_yaml: Callable[[str, str], Path],
+) -> None:
+    first = _load_path(write_yaml("first.yaml", "base: old\n"))
+    second = _load_path(write_yaml("alias.yaml", "base: &shared\n  x: 1\ncopy: *shared\n"))
+    third = _load_path(write_yaml("third.yaml", "base: {x: 2}\n"))
+    result = _merge([first, second, third], merge_strategy="override")
+    assert result.data == {"base": {"x": 2}, "copy": {"x": 1}}
+    assert second.data == {"base": {"x": 1}, "copy": {"x": 1}}
+    assert result.origins[("base", "x")] == third.origins[("base", "x")]
+    assert result.origins[("copy", "x")] == second.origins[("base", "x")]
+    assert result.data["base"] is not result.data["copy"]

@@ -8,7 +8,10 @@ stay small, explicit and strongly typed.
 from __future__ import annotations
 
 from collections.abc import MutableMapping
-from typing import Any
+from typing import Any, Literal
+
+type MergeStrategy = Literal["strict", "override"]
+"""Cross-source conflict policy: reject conflicts or let later sources win."""
 
 type Scalar = str | int | float | bool | None
 """A leaf value in a document tree."""

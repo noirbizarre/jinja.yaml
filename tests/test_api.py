@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 import pytest
 
-from jinja_yaml import load, load_dict, load_file, load_files
+from jinja_yaml import Environment, load, load_dict, load_file, load_files
 from jinja_yaml.exceptions import DuplicateKeyError, LoadError
 
 
@@ -119,3 +119,54 @@ def test_mapping_cls_via_load(write_yaml: Callable[[str, str], Path]) -> None:
     path = write_yaml("config.jinja.yaml", "a: 1\n")
     assert type(load(path, mapping_cls=MyDict)) is MyDict
     assert type(load({"a": 1}, mapping_cls=MyDict)) is MyDict
+
+
+@pytest.mark.parametrize("loader", [load_files, load])
+def test_override_resolves_final_document_with_api_options(
+    write_yaml: Callable[[str, str], Path], loader: Callable[..., object]
+) -> None:
+    first = write_yaml(
+        "base.yaml",
+        "port: 80\nurl: '{{ data.host }}:{{ port }}'\nbroken: '{{ invalid syntax'\n",
+    )
+    second = write_yaml("override.yaml", "port: 443\nbroken: '{{ answer() }}'\n")
+    result = loader(
+        (path for path in [first, second]),
+        merge_strategy="override",
+        namespaces={"data": {"host": "example.com"}},
+        environment=Environment(globals={"answer": lambda: 42}),
+        mapping_cls=MyDict,
+    )
+    assert type(result) is MyDict
+    assert result == {"port": 443, "url": "example.com:443", "broken": 42}
+
+
+def test_override_option_on_single_source_load(write_yaml: Callable[[str, str], Path]) -> None:
+    path = write_yaml("single.yaml", "value: '{{ other }}'\nother: 1\n")
+    for source in [path, str(path), {"value": "{{ other }}", "other": 1}]:
+        assert load(source, merge_strategy="override") == {"value": 1, "other": 1}
+
+
+@pytest.mark.parametrize("source", [{}, [], "missing.yaml", Path("missing.yaml")])
+def test_load_validates_strategy_for_every_dispatch(
+    source: dict[str, object] | list[str] | str | Path,
+) -> None:
+    with pytest.raises(ValueError, match="Unknown merge strategy"):
+        load(source, merge_strategy="unknown")  # ty: ignore[invalid-argument-type]
+
+
+def test_load_files_validates_strategy_before_consuming_paths() -> None:
+    def paths() -> Iterable[Path]:
+        pytest.fail("invalid strategy must be rejected before consuming paths")
+        yield Path("missing.yaml")
+
+    with pytest.raises(ValueError, match="Unknown merge strategy"):
+        load_files(paths(), merge_strategy="unknown")  # ty: ignore[invalid-argument-type]
+
+
+def test_override_does_not_allow_duplicate_keys_in_yaml(
+    write_yaml: Callable[[str, str], Path],
+) -> None:
+    path = write_yaml("duplicate.yaml", "value: 1\nvalue: 2\n")
+    with pytest.raises(DuplicateKeyError):
+        load_files([path], merge_strategy="override")
