@@ -266,7 +266,7 @@ class _Resolver:
         for name in self._referenced_variables(source, path):
             if name in self._document:
                 context[name] = self._resolve_node(self._document[name], (name,))
-            elif name not in self._namespaces:
+            elif name not in self._namespaces and name not in self._env.globals:
                 raise self._error(
                     MissingReferenceError(path, name, dependency_chain=tuple(self._stack))
                 )
