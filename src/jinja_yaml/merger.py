@@ -36,10 +36,10 @@ def _validate_merge_strategy(merge_strategy: MergeStrategy) -> None:
 
 
 def _merge(
-    documents: Iterable[_SourceDocument], *, merge_strategy: MergeStrategy = "strict"
-) -> _SourceDocument:
+    documents: Iterable[_SourceDocument[Document]], *, merge_strategy: MergeStrategy = "strict"
+) -> _SourceDocument[Document]:
     _validate_merge_strategy(merge_strategy)
-    result = _SourceDocument({})
+    result: _SourceDocument[Document] = _SourceDocument({})
     for document in documents:
         _merge_into(
             result.data,
@@ -63,7 +63,7 @@ def _copy_node(node: Node) -> Node:
     return node
 
 
-def _discard_origins(document: _SourceDocument, node: Node, path: KeyPath) -> None:
+def _discard_origins(document: _SourceDocument[Document], node: Node, path: KeyPath) -> None:
     """Remove a discarded subtree's origins without scanning unrelated paths."""
     if not document.origins:
         return
@@ -82,8 +82,8 @@ def _merge_into(
     incoming: dict[str, Node],
     *,
     path: KeyPath,
-    target_document: _SourceDocument,
-    source: _SourceDocument,
+    target_document: _SourceDocument[Document],
+    source: _SourceDocument[Document],
     merge_strategy: MergeStrategy,
 ) -> None:
     for key, value in incoming.items():

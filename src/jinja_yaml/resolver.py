@@ -18,8 +18,8 @@ see.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Any, cast
+from collections.abc import Mapping, MutableMapping
+from typing import Any, overload
 
 from jinja2 import TemplateError, TemplateSyntaxError, Undefined, UndefinedError
 
@@ -35,9 +35,28 @@ from .exceptions import (
 )
 from .graph import DependencyGraph
 from .provenance import _annotate_resolution, _Provenance, _SourceDocument
-from .types import Document, KeyPath, MappingClass, Namespaces, Node
+from .types import Document, KeyPath, MappingClass, Namespaces, Node, ResolvedDocument
 
 __all__ = ["resolve"]
+
+
+@overload
+def resolve(
+    document: Document,
+    *,
+    namespaces: Namespaces | None = None,
+    environment: Environment | None = None,
+) -> dict[str, Any]: ...
+
+
+@overload
+def resolve[M: MutableMapping[str, Any]](
+    document: Document,
+    *,
+    namespaces: Namespaces | None = None,
+    environment: Environment | None = None,
+    mapping_cls: type[M],
+) -> M: ...
 
 
 def resolve(
@@ -46,7 +65,7 @@ def resolve(
     namespaces: Namespaces | None = None,
     environment: Environment | None = None,
     mapping_cls: MappingClass = dict,
-) -> Document:
+) -> ResolvedDocument:
     """Resolve every templated value in ``document`` and return a new document.
 
     Resolved mappings are built with ``mapping_cls``, which defaults to
@@ -62,12 +81,12 @@ def resolve(
 
 
 def _resolve(
-    document: _SourceDocument,
+    document: _SourceDocument[Document],
     *,
     namespaces: Namespaces | None = None,
     environment: Environment | None = None,
     mapping_cls: MappingClass = dict,
-) -> _SourceDocument:
+) -> _SourceDocument[ResolvedDocument]:
     namespaces = namespaces or {}
     environment = environment or Environment()
     _check_namespace_collisions(document.data, namespaces)
@@ -86,7 +105,7 @@ class _Resolver:
 
     def __init__(
         self,
-        document: _SourceDocument,
+        document: _SourceDocument[Document],
         namespaces: Namespaces,
         environment: Environment,
         mapping_cls: MappingClass,
@@ -97,7 +116,7 @@ class _Resolver:
         self._namespaces = namespaces
         self._env = environment
         self._mapping_cls = mapping_cls
-        self._cache: dict[KeyPath, Node] = {}
+        self._cache: dict[KeyPath, Any] = {}
         self._stack: list[KeyPath] = []
         self._graph = DependencyGraph()
         self._references: dict[KeyPath, tuple[str, ...]] = {}
@@ -106,7 +125,7 @@ class _Resolver:
         locations = self._origins.get(error.key_path, ()) if error.key_path is not None else ()
         return _annotate_resolution(error, locations)
 
-    def run(self) -> _SourceDocument:
+    def run(self) -> _SourceDocument[ResolvedDocument]:
         self._build_graph(self._document, path=())
         cycle = self._graph.find_cycle()
         if cycle is not None:
@@ -116,7 +135,7 @@ class _Resolver:
             resolved[key] = self._resolve_node(value, (key,))
         if () in self._origins:
             self._resolved_origins[()] = self._origins[()]
-        return _SourceDocument(cast("Document", resolved), self._resolved_origins)
+        return _SourceDocument(resolved, self._resolved_origins)
 
     # -- dependency graph -------------------------------------------------
 
@@ -160,7 +179,7 @@ class _Resolver:
 
     # -- resolution -------------------------------------------------------
 
-    def _resolve_node(self, node: Node, path: KeyPath) -> Node:
+    def _resolve_node(self, node: Node, path: KeyPath) -> Any:
         if path in self._cache:
             return self._cache[path]
         if path in self._stack:
@@ -178,7 +197,7 @@ class _Resolver:
             self._resolved_origins[path] = self._origins[path]
         return resolved
 
-    def _resolve_value(self, node: Node, path: KeyPath) -> Node:
+    def _resolve_value(self, node: Node, path: KeyPath) -> Any:
         if isinstance(node, str) and self._env.is_template(node):
             result = self._render(node, path)
             if locations := self._origins.get(path):
@@ -188,7 +207,7 @@ class _Resolver:
             result = self._mapping_cls()
             for key, value in node.items():
                 result[key] = self._resolve_node(value, (*path, key))
-            return cast("Node", result)
+            return result
         if isinstance(node, list):
             return [self._resolve_node(value, (*path, index)) for index, value in enumerate(node)]
         return node
@@ -216,7 +235,7 @@ class _Resolver:
                 children = node.items() if isinstance(node, Mapping) else enumerate(node)
                 pending.extend((value, (*path, key), False) for key, value in children)
 
-    def _render(self, source: str, path: KeyPath) -> Node:
+    def _render(self, source: str, path: KeyPath) -> Any:
         # Static sources were validated during graph construction. Dynamic
         # loader targets can still fail at render time.
         context = self._build_context(source, path)

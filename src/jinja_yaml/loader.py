@@ -106,7 +106,7 @@ class StrictSafeLoader(yaml.SafeLoader):
             self._validate(value, child_path, active)
 
 
-def _parse(text: str, *, origin: str) -> _SourceDocument:
+def _parse(text: str, *, origin: str) -> _SourceDocument[Document]:
     loader: StrictSafeLoader | None = None
     try:
         loader = StrictSafeLoader(text)
@@ -133,7 +133,7 @@ def load_path(path: str | Path) -> Document:
     return _load_path(path).data
 
 
-def _load_path(path: str | Path) -> _SourceDocument:
+def _load_path(path: str | Path) -> _SourceDocument[Document]:
     """Load a file and retain marks for the internal pipeline."""
     path = Path(path)
     try:

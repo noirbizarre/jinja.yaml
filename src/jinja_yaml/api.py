@@ -8,9 +8,9 @@ this surface.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, MutableMapping
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, overload
 
 from . import loader
 from .environment import Environment
@@ -18,9 +18,28 @@ from .exceptions import LoadError
 from .merger import _merge, _validate_merge_strategy
 from .provenance import _SourceDocument
 from .resolver import _resolve
-from .types import Document, MappingClass, MergeStrategy, Namespaces
+from .types import MappingClass, MergeStrategy, Namespaces, ResolvedDocument
 
 __all__ = ["load", "load_dict", "load_file", "load_files"]
+
+
+@overload
+def load_file(
+    path: str | Path,
+    *,
+    namespaces: Namespaces | None = None,
+    environment: Environment | None = None,
+) -> dict[str, Any]: ...
+
+
+@overload
+def load_file[M: MutableMapping[str, Any]](
+    path: str | Path,
+    *,
+    namespaces: Namespaces | None = None,
+    environment: Environment | None = None,
+    mapping_cls: type[M],
+) -> M: ...
 
 
 def load_file(
@@ -29,12 +48,33 @@ def load_file(
     namespaces: Namespaces | None = None,
     environment: Environment | None = None,
     mapping_cls: MappingClass = dict,
-) -> Document:
+) -> ResolvedDocument:
     """Load and resolve a single YAML file."""
     document = loader._load_path(path)
     return _resolve(
         document, namespaces=namespaces, environment=environment, mapping_cls=mapping_cls
     ).data
+
+
+@overload
+def load_files(
+    paths: Iterable[str | Path],
+    *,
+    merge_strategy: MergeStrategy = "strict",
+    namespaces: Namespaces | None = None,
+    environment: Environment | None = None,
+) -> dict[str, Any]: ...
+
+
+@overload
+def load_files[M: MutableMapping[str, Any]](
+    paths: Iterable[str | Path],
+    *,
+    merge_strategy: MergeStrategy = "strict",
+    namespaces: Namespaces | None = None,
+    environment: Environment | None = None,
+    mapping_cls: type[M],
+) -> M: ...
 
 
 def load_files(
@@ -44,7 +84,7 @@ def load_files(
     namespaces: Namespaces | None = None,
     environment: Environment | None = None,
     mapping_cls: MappingClass = dict,
-) -> Document:
+) -> ResolvedDocument:
     """Load, merge and resolve several YAML files as one logical document.
 
     ``strict`` rejects conflicting leaves; ``override`` lets later sources win.
@@ -59,18 +99,58 @@ def load_files(
     ).data
 
 
+@overload
+def load_dict(
+    data: dict[str, Any],
+    *,
+    namespaces: Namespaces | None = None,
+    environment: Environment | None = None,
+) -> dict[str, Any]: ...
+
+
+@overload
+def load_dict[M: MutableMapping[str, Any]](
+    data: dict[str, Any],
+    *,
+    namespaces: Namespaces | None = None,
+    environment: Environment | None = None,
+    mapping_cls: type[M],
+) -> M: ...
+
+
 def load_dict(
     data: dict[str, Any],
     *,
     namespaces: Namespaces | None = None,
     environment: Environment | None = None,
     mapping_cls: MappingClass = dict,
-) -> Document:
+) -> ResolvedDocument:
     """Resolve an in-memory mapping. The input is never mutated."""
     document = _SourceDocument(loader.load_mapping(data))
     return _resolve(
         document, namespaces=namespaces, environment=environment, mapping_cls=mapping_cls
     ).data
+
+
+@overload
+def load(
+    source: str | Path | Iterable[str | Path] | dict[str, Any],
+    *,
+    merge_strategy: MergeStrategy = "strict",
+    namespaces: Namespaces | None = None,
+    environment: Environment | None = None,
+) -> dict[str, Any]: ...
+
+
+@overload
+def load[M: MutableMapping[str, Any]](
+    source: str | Path | Iterable[str | Path] | dict[str, Any],
+    *,
+    merge_strategy: MergeStrategy = "strict",
+    namespaces: Namespaces | None = None,
+    environment: Environment | None = None,
+    mapping_cls: type[M],
+) -> M: ...
 
 
 def load(
@@ -80,7 +160,7 @@ def load(
     namespaces: Namespaces | None = None,
     environment: Environment | None = None,
     mapping_cls: MappingClass = dict,
-) -> Document:
+) -> ResolvedDocument:
     """Load and resolve a source, dispatching on its type.
 
     ``source`` may be a path (``str`` or :class:`~pathlib.Path`), an iterable of

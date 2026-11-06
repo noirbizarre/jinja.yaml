@@ -5,16 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .exceptions import DuplicateKeyError, ResolutionError, SourceLocation
-from .types import Document, KeyPath
+from .types import KeyPath
 
 type _Provenance = dict[KeyPath, tuple[SourceLocation, ...]]
 
 
 @dataclass
-class _SourceDocument:
+class _SourceDocument[Data]:
     """Keep source metadata with its tree until the public API unwraps it."""
 
-    data: Document
+    data: Data
     origins: _Provenance = field(default_factory=dict)
 
 
