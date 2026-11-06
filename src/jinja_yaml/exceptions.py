@@ -1,8 +1,9 @@
 """Exception hierarchy for :mod:`jinja_yaml`.
 
-Every error raised by the library derives from :class:`JinjaYamlError`, so
-consumers can catch the whole family with a single ``except`` clause while
-still being able to discriminate between the individual failure modes.
+Library-defined domain errors derive from :class:`JinjaYamlError`, so consumers
+can catch that family with a single ``except`` clause while still discriminating
+between individual failure modes. Invalid arguments can raise built-in errors;
+for example, an unknown merge strategy raises :class:`ValueError`.
 
 All messages are descriptive and actionable, and — where relevant — expose the
 offending key path so users can locate the problem in their documents.
@@ -16,7 +17,7 @@ from .types import KeyPath, format_key_path
 
 
 class JinjaYamlError(Exception):
-    """Base class for every error raised by :mod:`jinja_yaml`."""
+    """Base class for library-defined loading, merging and resolution errors."""
 
 
 class LoadError(JinjaYamlError):
