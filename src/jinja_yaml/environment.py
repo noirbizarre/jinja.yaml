@@ -2,8 +2,8 @@
 
 A dedicated :class:`Environment` subclasses Jinja's
 :class:`~jinja2.nativetypes.NativeEnvironment`, which returns native Python
-types when a template consists of a single expression (so ``"{{ port }}"``
-yields an ``int`` rather than a ``str``). It defaults to
+types rather than only text. Literal-looking rendered strings can also become
+Python values, so a referenced string's type is not always preserved. It defaults to
 :class:`~jinja2.StrictUndefined` so that references to unknown keys fail loudly.
 
 The environment is the extension point of the library: custom filters, tests,

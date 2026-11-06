@@ -65,8 +65,8 @@ Key properties:
   later in the document.
 - **Dependency-aware** — references are discovered statically and resolved
   lazily through a dependency graph, with caching.
-- **Type-preserving** — a value that is a single expression keeps its native
-  type (`int`, `list`, `dict`, ...).
+- **Native rendering** — templates can produce Python values (`int`, `list`,
+  `dict`, ...), including conversion of literal-looking strings.
 - **Strict by default** — missing references, conflicting definitions and circular
   references raise errors; cross-source overrides are explicitly opt-in.
 
@@ -136,13 +136,22 @@ load_dict(
 # }
 ```
 
-### Native types are preserved
+### Templates render native Python values
 
-A value consisting of a single expression keeps the referenced value's type:
+Jinja's native rendering can return Python values rather than text:
 
 ```python
 load_dict({"port": "{{ base }}", "base": 8080})
 # {"port": 8080, "base": 8080}    <- port is an int, not "8080"
+```
+
+This is not a guarantee that a referenced string keeps its type: rendered text
+that looks like a Python literal can be converted to that literal's value.
+Plain strings without template syntax bypass rendering and remain unchanged:
+
+```python
+load_dict({"base": "8080", "copy": "{{ base }}"})
+# {"base": "8080", "copy": 8080}
 ```
 
 ### Merge strategies

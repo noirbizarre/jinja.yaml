@@ -8,8 +8,8 @@ The resolver ties the other modules together:
    including requirements from statically referenced loader templates.
 3. Detect cycles up-front and raise :class:`CircularReferenceError`.
 4. Resolve values lazily, caching each resolved node, and rendering through the
-   :class:`~jinja_yaml.environment.Environment` so single-expression templates
-   keep their native type.
+    :class:`~jinja_yaml.environment.Environment` for native Python results,
+    including conversion of literal-looking rendered strings.
 
 A runtime resolution stack is maintained as a defensive net: it catches cycles
 introduced by custom filters, globals or functions that static analysis cannot
