@@ -1,8 +1,4 @@
 <!-- markdownlint-disable MD013 MD033 MD041 -->
-<p align="center">
-  <img src="docs/images/icon.svg" alt="jinja.yaml" width="160">
-</p>
-
 <h1 align="center">jinja.yaml</h1>
 
 <p align="center"><strong>YAML configuration with dependency-aware Jinja templating</strong></p>
