@@ -190,7 +190,7 @@ testpaths = ["tests"]
 norecursedirs = [".git", "build", "dist"]
 
 [tool.coverage.run]
-source = ["lib"]
+source = ["jinja_yaml"]
 branch = true
 omit = [
     "tests/*",
