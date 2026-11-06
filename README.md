@@ -100,7 +100,10 @@ config = load(["base.jinja.yaml", "overrides.jinja.yaml"], merge_strategy="overr
 config = load({"key": "{{ other }}", "other": "value"})
 ```
 
-Every function returns a fully-resolved plain `dict`.
+By default, every function returns a fully resolved plain `dict`. Pass a
+zero-argument `MutableMapping` subclass as `mapping_cls` to customize the document
+and its structural nested mappings. Mappings produced by template evaluation
+retain their native type and identity; they are not converted by `mapping_cls`.
 
 > [!TIP]
 > Any file extension works, but we recommend `.jinja.yaml` (e.g.

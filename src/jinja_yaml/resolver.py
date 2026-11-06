@@ -8,8 +8,8 @@ The resolver ties the other modules together:
    including requirements from statically referenced loader templates.
 3. Detect cycles up-front and raise :class:`CircularReferenceError`.
 4. Resolve values lazily, caching each resolved node, and rendering through the
-    :class:`~jinja_yaml.environment.Environment` for native Python results,
-    including conversion of literal-looking rendered strings.
+   :class:`~jinja_yaml.environment.Environment` for native Python results,
+   including conversion of literal-looking rendered strings.
 
 A runtime resolution stack is maintained as a defensive net: it catches cycles
 introduced by custom filters, globals or functions that static analysis cannot
@@ -68,9 +68,10 @@ def resolve(
 ) -> ResolvedDocument:
     """Resolve every templated value in ``document`` and return a new document.
 
-    Resolved mappings are built with ``mapping_cls``, which defaults to
-    :class:`dict`. Pass any :class:`~collections.abc.MutableMapping` subclass to
-    control the concrete type of the returned document and its nested mappings.
+    Structural document mappings are built with ``mapping_cls``, which defaults
+    to :class:`dict`. Pass a zero-argument :class:`~collections.abc.MutableMapping`
+    subclass to customize them. Mappings produced by template evaluation retain
+    their native type and identity instead of being converted.
     """
     return _resolve(
         _SourceDocument(document),

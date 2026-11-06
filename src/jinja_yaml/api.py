@@ -1,9 +1,8 @@
 """The public API of :mod:`jinja_yaml`.
 
-These functions are thin compositions of the four phases — load, merge,
-resolve — and return a fully-resolved plain :class:`dict`. The internals are
-structured so a richer return type could be introduced later without breaking
-this surface.
+These functions compose loading, merging and resolution, returning a fully
+resolved plain :class:`dict` by default. ``mapping_cls`` customizes structural
+document mappings; mappings produced by templates retain their native types.
 """
 
 from __future__ import annotations
