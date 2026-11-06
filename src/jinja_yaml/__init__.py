@@ -19,6 +19,7 @@ from .exceptions import (
     SourceLocation,
     TemplateEvaluationError,
 )
+from .types import MergeStrategy
 
 try:
     # The installed distribution's metadata is the single source of truth,
@@ -40,6 +41,7 @@ __all__ = [
     "JinjaYamlError",
     "LoadError",
     "MergeError",
+    "MergeStrategy",
     "MissingReferenceError",
     "NamespaceCollisionError",
     "ResolutionError",

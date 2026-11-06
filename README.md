@@ -67,7 +67,8 @@ Key properties:
   lazily through a dependency graph, with caching.
 - **Type-preserving** — a value that is a single expression keeps its native
   type (`int`, `list`, `dict`, ...).
-- **Strict** — missing references, duplicate keys and circular references raise
+- **Strict by default** — missing references, conflicting definitions and circular
+  references raise errors; cross-source overrides are explicitly opt-in.
 
 <!-- not the implementation. -->
 
@@ -87,15 +88,15 @@ from jinja_yaml import load, load_dict, load_file, load_files
 # From a single file
 config = load_file("config.jinja.yaml")
 
-# From several files, merged into one logical document
-config = load_files(["base.jinja.yaml", "overrides.jinja.yaml"])
+# From several files, with later sources overriding earlier values
+config = load_files(["base.jinja.yaml", "overrides.jinja.yaml"], merge_strategy="override")
 
 # From an in-memory mapping
 config = load_dict({"fqdn": "nas.{{ domain }}", "domain": "home.arpa"})
 
 # `load` dispatches on the type of its argument
 config = load("config.jinja.yaml")
-config = load(["base.jinja.yaml", "overrides.jinja.yaml"])
+config = load(["base.jinja.yaml", "overrides.jinja.yaml"], merge_strategy="override")
 config = load({"key": "{{ other }}", "other": "value"})
 ```
 
@@ -143,6 +144,62 @@ A value consisting of a single expression keeps the referenced value's type:
 load_dict({"port": "{{ base }}", "base": 8080})
 # {"port": 8080, "base": 8080}    <- port is an int, not "8080"
 ```
+
+### Merge strategies
+
+`load_files()` and `load()` accept the keyword-only `merge_strategy` option:
+
+- `"strict"` (default) combines compatible sources and raises `DuplicateKeyError`
+  for conflicting values.
+- `"override"` recursively combines mappings while letting **later sources win**
+  for lists, scalars, and incompatible value categories.
+
+| Values at the same path | `strict` | `override` |
+| --- | --- | --- |
+| Key present in only one source | Copy its value | Copy its value |
+| Two mappings | Recursively merge children | Recursively merge children |
+| Two lists | Accept equal lists; otherwise raise | Replace the entire list |
+| Scalars (strings, numbers, booleans, null) | Accept equal values; otherwise raise | Replace with the later value |
+| Different categories | Accept Python-equal values; otherwise raise | Replace the entire earlier subtree |
+
+For example, the low-level merge operation works on raw mappings:
+
+```python
+from jinja_yaml.merger import merge
+
+merge(
+    [
+        {"service": {"port": 80, "host": "localhost"}, "items": [1, 2]},
+        {"service": {"port": 443}, "items": [3]},
+    ],
+    merge_strategy="override",
+)
+# {"service": {"port": 443, "host": "localhost"}, "items": [3]}
+```
+
+The same policy applies across any number of sources, in iterable order.
+Unmentioned mapping children survive; an empty mapping does not clear an earlier
+mapping. Lists are atomic: they are never concatenated or merged by index. An
+empty list replaces an earlier list, and explicit null replaces an earlier value
+under `"override"`; null is not a deletion marker.
+
+Strict merging uses Python equality (`==`) and retains the first equal value.
+Consequently, `True`, `1`, and `1.0` are accepted as equal, including inside lists,
+but their retained concrete type depends on source order. Override merging always
+retains the later non-mapping value and its type, even when it compares equal.
+Both modes copy containers without mutating inputs. An empty iterable produces
+an empty mapping.
+
+Merging happens **before template resolution**. Surviving templates see the final
+merged values, and replaced templates are not evaluated. In strict mode, different
+raw template strings conflict even if they would render to the same value.
+`merge()` does not resolve templates itself.
+
+The public `MergeStrategy` type alias describes the two supported strings.
+Unknown strategies raise `ValueError` before sources are consumed or files read.
+For a single path or in-memory mapping passed to `load()`, the strategy is
+validated but has no effect. `load_file()` and `load_dict()` do not need a merge
+option. Duplicate keys within one YAML mapping remain errors under either policy.
 
 ### External namespaces
 
@@ -245,8 +302,11 @@ except MissingReferenceError as error:
 ```
 
 Recursive merges retain the contributing origins of each container and its
-individual children. Identical definitions retain all their origins, in input
-order; conflicting definitions still raise an error. A rendered value belongs
+individual children. Under `"strict"`, identical definitions retain all their
+origins in input order; conflicting definitions raise an error. Under
+`"override"`, replaced values (including equal leaves and lists) retain only the
+winning source's origins. Discarded subtree origins are removed; unchanged
+siblings retain theirs. A rendered value belongs
 to its template declaration, including any mapping/list descendants it produces,
 rather than to its dependencies. Alias origins refer to the anchor definition.
 In-memory loads have no source coordinates, and `.source_locations` is empty.
@@ -272,8 +332,9 @@ values produced by template evaluation.
 
 Repeated keys within a YAML mapping raise `DuplicateKeyError`, even when their
 values are identical. Its `.path` identifies the full nested key, including
-list indices. When merging separate documents, identical leaf values are
-allowed, but conflicting values raise `DuplicateKeyError`.
+list indices. When merging separate documents with the default `"strict"`
+strategy, identical leaf values are allowed, but conflicting values raise
+`DuplicateKeyError`. The `"override"` strategy replaces cross-source conflicts.
 Its `.existing_locations` and `.incoming_locations` tuples identify both sides
 when source metadata is available, including earlier identical definitions in a
 cross-file conflict. Within a single file, these locations point to key tokens.
@@ -306,7 +367,7 @@ module under `src/jinja_yaml/`:
 | Phase        | Module           | Responsibility |
 |--------------|------------------|----------------|
 | **Load**     | `loader.py`      | Read YAML (file, files or mapping) into raw document trees. Rejects duplicate keys within a document. |
-| **Merge**    | `merger.py`      | Deep-merge several documents into one logical document. File names and order never affect the result. |
+| **Merge**    | `merger.py`      | Recursively combine documents with explicit strict or later-source-wins override semantics, independent of filenames. |
 | **Resolve**  | `resolver.py`    | Evaluate templated values against the merged document. |
 | **Validate** | *(future)*       | Optional schema validation. The architecture is designed to accommodate it without a redesign. |
 
