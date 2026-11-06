@@ -17,6 +17,7 @@ description = "YAML configuration with dependency-aware Jinja templating"
 distribution = "jinja.yaml"
 docs = false
 gh_ship = true
+gh_ship_token_mode = "app"
 keywords = "yaml, jinja"
 owner = "noirbizarre"
 package = "jinja_yaml"
