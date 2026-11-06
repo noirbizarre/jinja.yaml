@@ -6,7 +6,7 @@ import pytest
 
 from jinja_yaml import load_dict
 from jinja_yaml.environment import Environment
-from jinja_yaml.exceptions import CircularReferenceError, ResolutionError
+from jinja_yaml.exceptions import CircularReferenceError, InvalidTemplateError, ResolutionError
 
 
 def test_custom_filter() -> None:
@@ -82,3 +82,41 @@ def test_global_names_respect_local_scope_and_loader_context() -> None:
         environment=env,
     )
     assert result == {"answer": 42, "shared": 42, "isolated": 7, "local": 3}
+
+
+def test_custom_delimiters_render_and_track_dependencies() -> None:
+    env = Environment(
+        variable_start_string="[[",
+        variable_end_string="]]",
+        block_start_string="[%",
+        block_end_string="%]",
+        comment_start_string="[#",
+        comment_end_string="#]",
+    )
+    result = load_dict(
+        {
+            "copy": "[[ base ]]",
+            "block": "[% if base %][[ base ]][% endif %]",
+            "comment": "[# ignored #]42",
+            "literal": "{{ base }} {% invalid %} {# comment #}",
+            "base": 42,
+        },
+        environment=env,
+    )
+    assert result["copy"] == result["block"] == result["comment"] == 42
+    assert result["literal"] == "{{ base }} {% invalid %} {# comment #}"
+    with pytest.raises(CircularReferenceError):
+        load_dict({"a": "[[ b ]]", "b": "[[ a ]]"}, environment=env)
+    with pytest.raises(InvalidTemplateError):
+        load_dict({"a": "[[ broken"}, environment=env)
+
+
+def test_line_prefixes_are_detected() -> None:
+    env = Environment(line_statement_prefix="%", line_comment_prefix="##")
+    result = load_dict(
+        {"block": "% if base\n42\n% endif", "comment": "42 ## ignored", "base": True},
+        environment=env,
+    )
+    assert result["block"] == result["comment"] == 42
+    with pytest.raises(CircularReferenceError):
+        load_dict({"a": "% if a\n42\n% endif"}, environment=env)

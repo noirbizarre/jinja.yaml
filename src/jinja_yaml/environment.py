@@ -22,8 +22,6 @@ from ._analysis import TemplateAnalysis
 
 __all__ = ["Environment"]
 
-_BLOCK_MARKERS = ("{{", "{%", "{#")
-
 
 class Environment(NativeEnvironment):
     """The configurable Jinja environment used by the resolver.
@@ -51,7 +49,14 @@ class Environment(NativeEnvironment):
 
     def is_template(self, value: str) -> bool:
         """Return whether ``value`` contains any Jinja construct."""
-        return any(marker in value for marker in _BLOCK_MARKERS)
+        markers = (
+            self.variable_start_string,
+            self.block_start_string,
+            self.comment_start_string,
+            self.line_statement_prefix,
+            self.line_comment_prefix,
+        )
+        return any(marker is not None and marker in value for marker in markers)
 
     def referenced_variables(self, source: str) -> set[str]:
         """Return the set of undeclared (root) variables referenced by ``source``.
