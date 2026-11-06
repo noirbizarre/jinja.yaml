@@ -31,11 +31,16 @@ mise run cover         # ... with coverage
 mise run lint          # ruff
 mise run format        # ruff, rewriting
 mise run typecheck     # ty
-mise run ci            # everything ♻️ CI runs
+mise run ci            # core Python quality checks: format, lint, types, coverage
+mise run hooks         # the full file-validation hook suite
 ```
 
 Every task goes through `uv run`, which syncs the environment first — so a task
 cannot silently run against a stale `.venv`.
+
+The `ci` task runs the core Python checks on the local interpreter. GitHub CI
+also runs the hook suite, tests across the supported Python versions, and
+validates the release setup. Run `mise run hooks` as an additional local check.
 
 The other stacks this template renders put the tasks in the other place. That
 is deliberate, and there is no shim bridging the two: a `mise run test` that

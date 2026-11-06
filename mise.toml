@@ -133,7 +133,7 @@ description = "Run every prek hook over every file"
 run = "prek run --all-files --show-diff-on-failure"
 
 [tasks.ci]
-description = "Everything CI runs, locally"
+description = "Core Python quality checks: formatting, lint, types and coverage"
 depends = ["format:check", "lint", "typecheck", "cover"]
 
 # --- Template -----------------------------------------------------------------
