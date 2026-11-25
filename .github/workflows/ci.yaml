@@ -35,7 +35,7 @@ jobs:
           reshim: true
 
       # Run the same hooks as a developer's `git commit`, including ty.
-      - uses: j178/prek-action@v3.1.0
+      - uses: j178/prek-action@v3.1.1
 
       - name: Install gh-ship
         run: gh extension install noirbizarre/gh-ship
@@ -63,7 +63,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@v10.4.0
         with:
           python-version: ${{ matrix.python }}
           enable-cache: true
